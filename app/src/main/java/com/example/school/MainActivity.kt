@@ -38,7 +38,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
-
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -201,14 +200,15 @@ fun TodoApp(
         CyberAddEditDialog(
             item = editingItem,
             onDismiss = { showDialog = false },
-            onSave = { text, p, c, d, t ->
+            onSave = { text, p, c, e, d, t ->
                 if (editingItem == null) {
-                    viewModel.addTask(text, p, c, d, t)
+                    viewModel.addTask(text, p, c, e, d, t)
                 } else {
                     viewModel.updateTask(editingItem!!.copy(
                         task = text,
                         priority = p,
                         category = c,
+                        emoji = e,
                         dueDate = d,
                         dueTime = t
                     ))
@@ -278,13 +278,12 @@ fun CyberTodoRow(item: TodoItem, onToggle: () -> Unit, onDelete: () -> Unit, onE
         ) {
             Box(
                 modifier = Modifier
-                    .size(28.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
-                    .border(2.dp, if (item.isDone) pColor else Color.White.copy(0.2f), CircleShape)
-                    .background(if (item.isDone) pColor else Color.Transparent),
+                    .background(Color.White.copy(0.05f)),
                 contentAlignment = Alignment.Center
             ) {
-                if (item.isDone) Icon(Icons.Default.Check, null, modifier = Modifier.size(18.dp), tint = SpaceDark)
+                Text(item.emoji, fontSize = 20.sp)
             }
             
             Spacer(modifier = Modifier.width(16.dp))
@@ -305,7 +304,11 @@ fun CyberTodoRow(item: TodoItem, onToggle: () -> Unit, onDelete: () -> Unit, onE
                         Icon(Icons.Default.Schedule, null, modifier = Modifier.size(12.dp), tint = Color.White.copy(0.5f))
                         Text(
                             text = buildString {
-                                if (item.dueDate != null) append(SimpleDateFormat("dd/MM", Locale.getDefault()).format(Date(item.dueDate)))
+                                if (item.dueDate != null) {
+                                    val sdf = SimpleDateFormat("EEEE, dd/MM", Locale("id", "ID"))
+                                    sdf.timeZone = TimeZone.getTimeZone("Asia/Jakarta")
+                                    append(sdf.format(Date(item.dueDate)))
+                                }
                                 if (item.dueTime != null) {
                                     if (isNotEmpty()) append(" ")
                                     append(item.dueTime)
@@ -315,6 +318,22 @@ fun CyberTodoRow(item: TodoItem, onToggle: () -> Unit, onDelete: () -> Unit, onE
                             color = Color.White.copy(0.5f)
                         )
                     }
+                }
+            }
+
+            IconButton(
+                onClick = onToggle,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .border(2.dp, if (item.isDone) pColor else Color.White.copy(0.2f), CircleShape)
+                        .background(if (item.isDone) pColor else Color.Transparent),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (item.isDone) Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp), tint = SpaceDark)
                 }
             }
             
@@ -366,16 +385,18 @@ fun CyberEmptyState() {
 fun CyberAddEditDialog(
     item: TodoItem?,
     onDismiss: () -> Unit, 
-    onSave: (String, Int, String, Long?, String?) -> Unit
+    onSave: (String, Int, String, String, Long?, String?) -> Unit
 ) {
     var text by remember { mutableStateOf(item?.task ?: "") }
     var priority by remember { mutableIntStateOf(item?.priority ?: 1) }
     var category by remember { mutableStateOf(item?.category ?: "Umum") }
+    var emoji by remember { mutableStateOf(item?.emoji ?: "📝") }
     var date by remember { mutableStateOf(item?.dueDate) }
     var time by remember { mutableStateOf(item?.dueTime) }
     
     val context = LocalContext.current
     val categories = listOf("Umum", "Kerja", "Belajar", "Pribadi", "Belanja")
+    val emojiOptions = listOf("📝", "💻", "🎓", "🏠", "🛒", "🔥", "🚀", "❤️", "🎨", "⚽")
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -403,16 +424,36 @@ fun CyberAddEditDialog(
                         focusedIndicatorColor = NeonCyan
                     )
                 )
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
+                Text("EMOJI", fontSize = 10.sp, fontWeight = FontWeight.Black, color = Color.White.copy(0.4f))
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+                    emojiOptions.forEach { e ->
+                        val active = emoji == e
+                        Box(
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (active) ElectricIndigo.copy(0.2f) else Color.White.copy(0.05f))
+                                .border(1.dp, if (active) ElectricIndigo else Color.Transparent, RoundedCornerShape(8.dp))
+                                .clickable { emoji = e },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(e, fontSize = 20.sp)
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
                 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
                         onClick = {
-                            val calendar = Calendar.getInstance()
+                            val calendar = Calendar.getInstance(TimeZone.getTimeZone("Asia/Jakarta"))
                             if (date != null) calendar.timeInMillis = date!!
                             DatePickerDialog(context, { _, y, m, d ->
-                                date = Calendar.getInstance().apply { set(y, m, d) }.timeInMillis
+                                date = Calendar.getInstance(TimeZone.getTimeZone("Asia/Jakarta")).apply { set(y, m, d) }.timeInMillis
                             }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show()
                         },
                         modifier = Modifier.weight(1f),
@@ -421,12 +462,14 @@ fun CyberAddEditDialog(
                     ) {
                         Icon(Icons.Default.CalendarMonth, null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(if (date == null) "Tanggal" else SimpleDateFormat("dd/MM", Locale.getDefault()).format(Date(date!!)), fontSize = 12.sp)
+                        val sdf = SimpleDateFormat("EEEE, dd/MM", Locale("id", "ID"))
+                        sdf.timeZone = TimeZone.getTimeZone("Asia/Jakarta")
+                        Text(if (date == null) "Tanggal" else sdf.format(Date(date!!)), fontSize = 10.sp)
                     }
                     
                     Button(
                         onClick = {
-                            val calendar = Calendar.getInstance()
+                            val calendar = Calendar.getInstance(TimeZone.getTimeZone("Asia/Jakarta"))
                             TimePickerDialog(context, { _, h, m ->
                                 time = String.format("%02d:%02d", h, m)
                             }, calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE), true).show()
@@ -485,7 +528,7 @@ fun CyberAddEditDialog(
                 Spacer(modifier = Modifier.height(32.dp))
                 
                 Button(
-                    onClick = { if(text.isNotBlank()) onSave(text, priority, category, date, time) },
+                    onClick = { if(text.isNotBlank()) onSave(text, priority, category, emoji, date, time) },
                     modifier = Modifier.fillMaxWidth().height(60.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = ElectricIndigo),
                     shape = RoundedCornerShape(16.dp)

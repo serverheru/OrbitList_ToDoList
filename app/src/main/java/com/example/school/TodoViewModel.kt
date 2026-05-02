@@ -10,12 +10,13 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     private val todoDao = TodoDatabase.getDatabase(application).todoDao()
     val allTasks: Flow<List<TodoItem>> = todoDao.getAllTasks()
 
-    fun addTask(taskText: String, priority: Int = 1, category: String = "Umum", dueDate: Long? = null, dueTime: String? = null) {
+    fun addTask(taskText: String, priority: Int = 1, category: String = "Umum", emoji: String = "📝", dueDate: Long? = null, dueTime: String? = null) {
         viewModelScope.launch {
             todoDao.addTask(TodoItem(
                 task = taskText, 
                 priority = priority, 
                 category = category,
+                emoji = emoji,
                 dueDate = dueDate,
                 dueTime = dueTime
             ))

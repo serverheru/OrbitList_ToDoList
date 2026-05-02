@@ -6,34 +6,35 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = PrimaryDark,
-    secondary = SecondaryDark,
-    tertiary = TertiaryDark,
-    background = BackgroundDark,
-    surface = SurfaceDark,
-    onPrimary = BackgroundDark,
-    onSecondary = BackgroundDark,
-    onTertiary = BackgroundDark,
-    onBackground = BackgroundLight,
-    onSurface = BackgroundLight
+    primary = ElectricIndigo,
+    secondary = NeonCyan,
+    tertiary = VividViolet,
+    background = SpaceDark,
+    surface = GlassSurface,
+    onPrimary = Color.White,
+    onSecondary = SpaceDark,
+    onTertiary = Color.White,
+    onBackground = Color.White,
+    onSurface = Color.White
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = PrimaryLight,
-    secondary = SecondaryLight,
-    tertiary = TertiaryLight,
-    background = BackgroundLight,
-    surface = SurfaceLight,
-    onPrimary = SurfaceLight,
-    onSecondary = SurfaceLight,
-    onTertiary = SurfaceLight,
-    onBackground = BackgroundDark,
-    onSurface = BackgroundDark
+    primary = ElectricIndigo,
+    secondary = NeonCyan,
+    tertiary = VividViolet,
+    background = Color(0xFFF8FAFC),
+    surface = Color.White,
+    onPrimary = Color.White,
+    onSecondary = Color.White,
+    onTertiary = Color.White,
+    onBackground = SpaceDark,
+    onSurface = SpaceDark
 )
 
 @Composable

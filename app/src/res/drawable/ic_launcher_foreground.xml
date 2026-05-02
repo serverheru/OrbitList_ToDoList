@@ -1,0 +1,37 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Outer Quantum Ring -->
+    <path
+        android:pathData="M54,20A34,34 0,1 1,20 54A34,34 0,0 1,54 20"
+        android:strokeWidth="2"
+        android:strokeColor="#06B6D4"
+        android:strokeAlpha="0.5"/>
+
+    <!-- Inner Core Glow -->
+    <path
+        android:pathData="M54,34A20,20 0,1 1,34 54A20,20 0,0 1,54 34"
+        android:fillColor="#6366F1"
+        android:fillAlpha="0.2"/>
+
+    <!-- Rocket Mission Icon -->
+    <path
+        android:pathData="M54,35C54,35 46,52 46,65C46,69 49,71 54,71C59,71 62,69 62,65C62,52 54,35 54,35Z"
+        android:fillColor="#FFFFFF"/>
+
+    <path
+        android:pathData="M54,45m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0"
+        android:fillColor="#06B6D4"/>
+
+    <!-- Checkmark on Rocket -->
+    <path
+        android:pathData="M51,56L53,58L57,54"
+        android:strokeWidth="2"
+        android:strokeColor="#6366F1"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
+
+</vector>

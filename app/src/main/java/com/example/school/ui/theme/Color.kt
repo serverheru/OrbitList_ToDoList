@@ -2,21 +2,19 @@ package com.example.school.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Light Palette - Vibrant & Fresh
-val PrimaryLight = Color(0xFF6366F1) // Indigo
-val SecondaryLight = Color(0xFF8B5CF6) // Violet
-val TertiaryLight = Color(0xFFEC4899) // Pink
-val BackgroundLight = Color(0xFFF8FAFC)
-val SurfaceLight = Color(0xFFFFFFFF)
+// Next-Gen Cyber-Premium Palette
+val SpaceDark = Color(0xFF030712) // Near Black
+val DeepSpace = Color(0xFF0F172A) // Slate 900
+val GlassSurface = Color(0xCC1E293B) // Semi-transparent Slate
+val ElectricIndigo = Color(0xFF6366F1)
+val NeonCyan = Color(0xFF06B6D4)
+val VividViolet = Color(0xFF8B5CF6)
+val HotPink = Color(0xFFF43F5E)
 
-// Dark Palette - Deep & Elegant
-val PrimaryDark = Color(0xFF818CF8)
-val SecondaryDark = Color(0xFFA78BFA)
-val TertiaryDark = Color(0xFFF472B6)
-val BackgroundDark = Color(0xFF0F172A) // Deep Slate
-val SurfaceDark = Color(0xFF1E293B)
+// Status with Glow potential
+val CyberRed = Color(0xFFFF2E63)
+val CyberGreen = Color(0xFF08FFC8)
+val CyberAmber = Color(0xFFFFD369)
 
-// Status Colors
-val PriorityHigh = Color(0xFFEF4444)
-val PriorityMedium = Color(0xFFF59E0B)
-val PriorityLow = Color(0xFF10B981)
+val WhiteOpacity10 = Color(0x1AFFFFFF)
+val WhiteOpacity20 = Color(0x33FFFFFF)

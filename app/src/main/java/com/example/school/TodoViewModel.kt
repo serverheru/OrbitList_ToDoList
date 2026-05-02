@@ -22,9 +22,15 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun updateTask(item: TodoItem, isDone: Boolean) {
+    fun updateTaskStatus(item: TodoItem, isDone: Boolean) {
         viewModelScope.launch {
             todoDao.updateTask(item.copy(isDone = isDone))
+        }
+    }
+
+    fun updateTask(item: TodoItem) {
+        viewModelScope.launch {
+            todoDao.updateTask(item)
         }
     }
 

@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.school"
+    namespace = "com.example.orbitlist"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -13,7 +13,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.school"
+        applicationId = "com.example.orbitlist"
         minSdk = 24
         targetSdk = 36
         versionCode = 1

@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "School"
+rootProject.name = "OrbitList"
 include(":app")

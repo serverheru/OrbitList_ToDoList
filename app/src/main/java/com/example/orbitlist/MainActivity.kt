@@ -52,6 +52,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.window.DialogProperties
 import com.example.orbitlist.ui.theme.*
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
@@ -98,6 +99,7 @@ fun TodoApp(
     viewModel: TodoViewModel = viewModel()
 ) {
     var editingItem by remember { mutableStateOf<TodoItem?>(null) }
+    var detailItem by remember { mutableStateOf<TodoItem?>(null) }
     var showSheet by remember { mutableStateOf(false) }
     var filterCategory by remember { mutableStateOf("Semua") }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -316,7 +318,8 @@ fun TodoApp(
                                         editingItem = item
                                         showSheet = true
                                     },
-                                    onPin = { viewModel.togglePin(item) }
+                                    onPin = { viewModel.togglePin(item) },
+                                    onViewDetail = { detailItem = item }
                                 )
                             }
                         }
@@ -353,6 +356,140 @@ fun TodoApp(
             }
         )
     }
+
+    if (detailItem != null) {
+        CyberDetailDialog(
+            item = detailItem!!,
+            onDismiss = { detailItem = null },
+            onEdit = {
+                editingItem = detailItem
+                detailItem = null
+                showSheet = true
+            }
+        )
+    }
+}
+
+@Composable
+fun CyberDetailDialog(
+    item: TodoItem,
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        confirmButton = {},
+        modifier = Modifier
+            .fillMaxWidth(0.9f)
+            .clip(RoundedCornerShape(32.dp))
+            .border(1.dp, ElectricIndigo.copy(0.3f), RoundedCornerShape(32.dp)),
+        containerColor = SpaceDark,
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color.White.copy(0.05f))
+                            .border(1.dp, Color.White.copy(0.1f), RoundedCornerShape(16.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(item.emoji, fontSize = 28.sp)
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text(
+                            item.category.uppercase(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = NeonCyan,
+                            letterSpacing = 2.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                        Text(
+                            item.task,
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                if (item.dueDate != null || item.dueTime != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Schedule, null, tint = ElectricIndigo, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        val dateStr = item.dueDate?.let {
+                            val sdf = SimpleDateFormat("EEEE, dd MMMM yyyy", Locale("id", "ID"))
+                            sdf.timeZone = TimeZone.getTimeZone("Asia/Jakarta")
+                            sdf.format(Date(it))
+                        } ?: "Tidak ada tanggal"
+                        Text(
+                            "$dateStr ${item.dueTime ?: ""}",
+                            color = Color.White.copy(0.8f),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                Surface(
+                    color = Color.White.copy(0.03f),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            "DESKRIPSI MISI",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(0.4f),
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            if (item.description.isNotBlank()) item.description else "Tidak ada deskripsi tambahan untuk misi ini.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color.White.copy(0.9f),
+                            lineHeight = 24.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, Color.White.copy(0.2f))
+                    ) {
+                        Text("TUTUP", color = Color.White)
+                    }
+                    Button(
+                        onClick = onEdit,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = ElectricIndigo)
+                    ) {
+                        Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("EDIT MISI")
+                    }
+                }
+            }
+        }
+    )
 }
 
 @Composable
@@ -415,7 +552,7 @@ fun InteractiveFAB(onClick: () -> Unit) {
 }
 
 @Composable
-fun CyberTodoRow(item: TodoItem, onToggle: () -> Unit, onDelete: () -> Unit, onEdit: () -> Unit, onPin: () -> Unit) {
+fun CyberTodoRow(item: TodoItem, onToggle: () -> Unit, onDelete: () -> Unit, onEdit: () -> Unit, onPin: () -> Unit, onViewDetail: () -> Unit) {
     val pColor = when(item.priority) {
         2 -> CyberRed
         1 -> CyberAmber
@@ -465,8 +602,6 @@ fun CyberTodoRow(item: TodoItem, onToggle: () -> Unit, onDelete: () -> Unit, onE
                             fontWeight = FontWeight.Bold, 
                             fontSize = 17.sp, 
                             color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
                             style = if (item.isDone) MaterialTheme.typography.bodyLarge.copy(textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough) else MaterialTheme.typography.bodyLarge
                         )
                     }
@@ -555,6 +690,9 @@ fun CyberTodoRow(item: TodoItem, onToggle: () -> Unit, onDelete: () -> Unit, onE
                             color = Color.White.copy(0.3f),
                             modifier = Modifier.padding(end = 8.dp)
                         )
+                        IconButton(onClick = onViewDetail) {
+                            Icon(Icons.Default.Info, null, tint = NeonCyan, modifier = Modifier.size(18.dp))
+                        }
                         IconButton(onClick = onPin) {
                             Icon(if (item.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin, null, tint = if (item.isPinned) ElectricIndigo else Color.White.copy(0.3f), modifier = Modifier.size(18.dp))
                         }
@@ -787,19 +925,45 @@ fun CyberAddEditSheet(
 
             Column {
                 Text("KATEGORI", fontSize = 10.sp, fontWeight = FontWeight.Black, color = Color.White.copy(0.4f))
-                Row(modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
-                    categories.forEach { cat ->
-                        val active = category == cat
-                        Box(
-                            modifier = Modifier
-                                .padding(end = 8.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (active) ElectricIndigo.copy(0.2f) else Color.Transparent)
-                                .border(1.dp, if (active) ElectricIndigo else Color.White.copy(0.1f), RoundedCornerShape(8.dp))
-                                .clickable { category = cat }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Text(cat, fontSize = 12.sp, color = if (active) Color.White else Color.White.copy(0.5f))
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                var expanded by remember { mutableStateOf(false) }
+                
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded }
+                ) {
+                    TextField(
+                        value = category,
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.White.copy(0.05f),
+                            unfocusedContainerColor = Color.White.copy(0.05f),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedIndicatorColor = ElectricIndigo,
+                            unfocusedIndicatorColor = Color.White.copy(0.1f)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+                    
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false },
+                        modifier = Modifier.background(SpaceDark)
+                    ) {
+                        categories.forEach { cat ->
+                            DropdownMenuItem(
+                                text = { Text(cat, color = Color.White) },
+                                onClick = {
+                                    category = cat
+                                    expanded = false
+                                }
+                            )
                         }
                     }
                 }

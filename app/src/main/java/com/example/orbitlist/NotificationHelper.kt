@@ -28,59 +28,80 @@ object NotificationHelper {
         if (item.dueDate == null || item.dueTime == null) return
 
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val intent = Intent(context, NotificationReceiver::class.java).apply {
-            putExtra("TASK_NAME", item.task)
-            putExtra("TASK_EMOJI", item.emoji)
-            putExtra("TASK_ID", item.id)
-        }
-
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            item.id,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        
+        // Define the intervals: 1 hour before, 5 minutes before, and exactly at the time
+        val intervals = listOf(
+            -60 to " (1 Jam Lagi)",
+            -5 to " (5 Menit Lagi)",
+            0 to ""
         )
 
-        val calendar = Calendar.getInstance(TimeZone.getTimeZone("Asia/Jakarta")).apply {
-            timeInMillis = item.dueDate
-            val timeParts = item.dueTime.split(":")
-            set(Calendar.HOUR_OF_DAY, timeParts[0].toInt())
-            set(Calendar.MINUTE, timeParts[1].toInt())
-            set(Calendar.SECOND, 0)
-        }
+        intervals.forEach { (minutesOffset, labelSuffix) ->
+            val intent = Intent(context, NotificationReceiver::class.java).apply {
+                putExtra("TASK_NAME", item.task + labelSuffix)
+                putExtra("TASK_EMOJI", item.emoji)
+                putExtra("TASK_ID", item.id)
+                // Use a unique notification ID for each interval to avoid overwriting
+                putExtra("NOTIFICATION_ID", item.id * 10 + minutesOffset.coerceAtLeast(-60))
+            }
 
-        if (calendar.timeInMillis > System.currentTimeMillis()) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                if (alarmManager.canScheduleExactAlarms()) {
+            // requestID must be unique for each alarm to coexist
+            val requestID = item.id * 10 + minutesOffset.coerceAtLeast(-60)
+
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                requestID,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val calendar = Calendar.getInstance(TimeZone.getTimeZone("Asia/Jakarta")).apply {
+                timeInMillis = item.dueDate
+                val timeParts = item.dueTime.split(":")
+                set(Calendar.HOUR_OF_DAY, timeParts[0].toInt())
+                set(Calendar.MINUTE, timeParts[1].toInt())
+                set(Calendar.SECOND, 0)
+                add(Calendar.MINUTE, minutesOffset)
+            }
+
+            if (calendar.timeInMillis > System.currentTimeMillis()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    if (alarmManager.canScheduleExactAlarms()) {
+                        alarmManager.setExactAndAllowWhileIdle(
+                            AlarmManager.RTC_WAKEUP,
+                            calendar.timeInMillis,
+                            pendingIntent
+                        )
+                    } else {
+                        alarmManager.set(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pendingIntent)
+                    }
+                } else {
                     alarmManager.setExactAndAllowWhileIdle(
                         AlarmManager.RTC_WAKEUP,
                         calendar.timeInMillis,
                         pendingIntent
                     )
-                } else {
-                    alarmManager.set(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pendingIntent)
                 }
-            } else {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    calendar.timeInMillis,
-                    pendingIntent
-                )
             }
         }
     }
 
     fun cancelNotification(context: Context, itemId: Int) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val intent = Intent(context, NotificationReceiver::class.java)
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            itemId,
-            intent,
-            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
-        )
-        if (pendingIntent != null) {
-            alarmManager.cancel(pendingIntent)
+        
+        // Cancel all three possible intervals
+        listOf(0, -5, -60).forEach { offset ->
+            val requestID = itemId * 10 + offset
+            val intent = Intent(context, NotificationReceiver::class.java)
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                requestID,
+                intent,
+                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+            )
+            if (pendingIntent != null) {
+                alarmManager.cancel(pendingIntent)
+            }
         }
     }
 }

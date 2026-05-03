@@ -12,13 +12,14 @@ class NotificationReceiver : BroadcastReceiver() {
         val taskName = intent.getStringExtra("TASK_NAME") ?: "OrbitList"
         val taskEmoji = intent.getStringExtra("TASK_EMOJI") ?: "🚀"
         val taskId = intent.getIntExtra("TASK_ID", 0)
+        val notificationId = intent.getIntExtra("NOTIFICATION_ID", taskId)
 
         val mainIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
         val pendingIntent = PendingIntent.getActivity(
             context,
-            taskId,
+            notificationId,
             mainIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -33,6 +34,6 @@ class NotificationReceiver : BroadcastReceiver() {
             .build()
 
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(taskId, notification)
+        notificationManager.notify(notificationId, notification)
     }
 }

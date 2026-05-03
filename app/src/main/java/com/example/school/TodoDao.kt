@@ -5,11 +5,11 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TodoDao {
-    @Query("SELECT * FROM todo_items ORDER BY id ASC")
+    @Query("SELECT * FROM todo_items ORDER BY isPinned DESC, position ASC, id ASC")
     fun getAllTasks(): Flow<List<TodoItem>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun addTask(item: TodoItem)
+    suspend fun addTask(item: TodoItem): Long
 
     @Update
     suspend fun updateTask(item: TodoItem)

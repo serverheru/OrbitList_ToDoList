@@ -24,10 +24,57 @@ object NotificationHelper {
         }
     }
 
+    fun scheduleDailyBriefing(context: Context) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(context, NotificationReceiver::class.java).apply {
+            action = "DAILY_BRIEFING"
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            9999, // Unique ID for daily briefing
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 4)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            if (before(Calendar.getInstance())) {
+                add(Calendar.DAY_OF_YEAR, 1)
+            }
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (alarmManager.canScheduleExactAlarms()) {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    calendar.timeInMillis,
+                    pendingIntent
+                )
+            } else {
+                alarmManager.setInexactRepeating(
+                    AlarmManager.RTC_WAKEUP,
+                    calendar.timeInMillis,
+                    AlarmManager.INTERVAL_DAY,
+                    pendingIntent
+                )
+            }
+        } else {
+            alarmManager.setExactAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                calendar.timeInMillis,
+                pendingIntent
+            )
+        }
+    }
+
     fun scheduleNotification(context: Context, item: TodoItem) {
         if (item.dueDate == null || item.dueTime == null) return
 
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val prefs = context.getSharedPreferences("OrbitListPrefs", Context.MODE_PRIVATE)
+        val globalSoundUri = prefs.getString("global_sound_uri", null)
         
         // Define the intervals: 1 hour before, 5 minutes before, and exactly at the time
         val intervals = listOf(
@@ -41,6 +88,7 @@ object NotificationHelper {
                 putExtra("TASK_NAME", item.task + labelSuffix)
                 putExtra("TASK_EMOJI", item.emoji)
                 putExtra("TASK_ID", item.id)
+                putExtra("SOUND_URI", globalSoundUri)
                 // Use a unique notification ID for each interval to avoid overwriting
                 putExtra("NOTIFICATION_ID", item.id * 10 + minutesOffset.coerceAtLeast(-60))
             }
@@ -55,7 +103,7 @@ object NotificationHelper {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            val calendar = Calendar.getInstance(TimeZone.getTimeZone("Asia/Jakarta")).apply {
+            val calendar = Calendar.getInstance().apply {
                 timeInMillis = item.dueDate
                 val timeParts = item.dueTime.split(":")
                 set(Calendar.HOUR_OF_DAY, timeParts[0].toInt())

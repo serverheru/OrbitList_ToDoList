@@ -17,5 +17,9 @@ data class TodoItem(
     val dueDate: Long? = null,
     val dueTime: String? = null,
     val position: Int = 0,
+    val repeatMode: String = "None", // None, Daily, Weekly
+    val attachmentLink: String = "",
+    val soundUri: String? = null,
+    val completedAt: Long? = null,
     val createdAt: Long = System.currentTimeMillis()
 )

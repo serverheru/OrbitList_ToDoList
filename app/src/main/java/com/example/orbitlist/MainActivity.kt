@@ -1427,7 +1427,9 @@ fun CyberTodoRow(glowColor: Color, item: TodoItem, onToggle: () -> Unit, onDelet
     }
     
     val isRecurring = item.repeatMode != "None"
-    val isDue = remember(item.dueDate, item.dueTime) {
+    val isDue = remember(item.dueDate, item.dueTime, item.isDone) {
+        if (item.isDone) return@remember true // If already done, we show checklist, not lock
+
         val now = Calendar.getInstance()
         val target = Calendar.getInstance()
         if (item.dueDate != null) {
@@ -1543,21 +1545,26 @@ fun CyberTodoRow(glowColor: Color, item: TodoItem, onToggle: () -> Unit, onDelet
                     }
                 }
 
-                if (!isRecurring || isDue) {
+                if (!isRecurring || isDue || item.isDone) {
                     IconButton(
                         onClick = {
-                            if (isRecurring && isDue && !isExtending) {
-                                isExtending = true
-                                scope.launch {
-                                    kotlinx.coroutines.delay(600)
-                                    onToggle()
-                                    isExtending = false
+                            if (isRecurring) {
+                                // If recurring, can only check, cannot uncheck once done
+                                if (!item.isDone && !isExtending) {
+                                    isExtending = true
+                                    scope.launch {
+                                        kotlinx.coroutines.delay(600)
+                                        onToggle()
+                                        isExtending = false
+                                    }
                                 }
-                            } else if (!isRecurring) {
+                            } else {
+                                // One-time task can be toggled
                                 onToggle()
                             }
                         }, 
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(36.dp),
+                        enabled = !isRecurring || !item.isDone
                     ) {
                         val checkScale by animateFloatAsState(
                             targetValue = if (item.isDone || isExtending) 1.2f else 1f,
@@ -1645,7 +1652,7 @@ fun CyberTodoRow(glowColor: Color, item: TodoItem, onToggle: () -> Unit, onDelet
                                     Icon(Icons.Default.ErrorOutline, null, tint = glowColor, modifier = Modifier.size(14.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        "Konfirmasi untuk perpanjang orbit.", 
+                                        "Orbit akan terupdate otomatis kemudian.",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = glowColor,
                                         fontWeight = FontWeight.Bold,

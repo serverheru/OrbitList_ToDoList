@@ -12,7 +12,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 // Definisikan warna di luar class agar rapi
-val DeepBlueBlack = Color(0xFF050B18) // Biru kehitaman utama
+val DeepBlueBlack = Color(0xFF060E1C) // Biru kehitaman utama
 val SoftBlueBlack = Color(0xFF0E1421) // Sedikit lebih terang untuk kartu/surface
 
 private val DarkColorScheme = darkColorScheme(

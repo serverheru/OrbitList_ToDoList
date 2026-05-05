@@ -35,12 +35,57 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     val categories: StateFlow<List<String>> = _categories.asStateFlow()
 
     val allTasks: Flow<List<TodoItem>> = combine(todoDao.getAllTasks(), _searchQuery) { tasks, query ->
-        if (query.isBlank()) {
+        val filtered = if (query.isBlank()) {
             tasks
         } else {
             tasks.filter { 
                 it.task.contains(query, ignoreCase = true) || 
                 it.description.contains(query, ignoreCase = true) 
+            }
+        }
+        
+        // Reset recurring tasks if next period has started
+        val now = System.currentTimeMillis()
+        val calendar = Calendar.getInstance()
+        val todayMidnight = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+
+        filtered.map { item ->
+            if (item.isDone && item.repeatMode != "None" && item.dueDate != null) {
+                // Determine when to reset: Midnight of the day after the dueDate
+                calendar.timeInMillis = item.dueDate
+                if (item.repeatMode == "Daily") {
+                    calendar.add(Calendar.DAY_OF_YEAR, 1)
+                } else if (item.repeatMode == "Weekly") {
+                    calendar.add(Calendar.WEEK_OF_YEAR, 1)
+                }
+                
+                // Set to start of that next period (Midnight)
+                calendar.set(Calendar.HOUR_OF_DAY, 0)
+                calendar.set(Calendar.MINUTE, 0)
+                calendar.set(Calendar.SECOND, 0)
+                calendar.set(Calendar.MILLISECOND, 0)
+                
+                val resetTime = calendar.timeInMillis
+                
+                // Only reset if it wasn't completed today (allows it to stay struck through for the rest of today)
+                val isCompletedToday = item.completedAt != null && item.completedAt!! >= todayMidnight
+
+                if (now >= resetTime && !isCompletedToday) {
+                    // Time to reset for next period
+                    val nextDueDate = calculateNextDueDate(item.dueDate, item.repeatMode)
+                    val resetItem = item.copy(isDone = false, dueDate = nextDueDate)
+                    viewModelScope.launch { todoDao.updateTask(resetItem) }
+                    resetItem
+                } else {
+                    item
+                }
+            } else {
+                item
             }
         }
     }
@@ -161,12 +206,20 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     fun updateTaskStatus(item: TodoItem, isDone: Boolean) {
         viewModelScope.launch {
            if (isDone && item.repeatMode != "None") {
-                // Single entry loop logic: Update the same entry with next date
-                val nextDueDate = calculateNextDueDate(item.dueDate ?: System.currentTimeMillis(), item.repeatMode)
+                // Stay checked but track time
                 val updatedItem = item.copy(
-                    isDone = false, // Automatically reset for next occurrence
-                    dueDate = nextDueDate,
-                    completedAt = System.currentTimeMillis() // Track last completion
+                    isDone = true,
+                    completedAt = System.currentTimeMillis()
+                )
+                todoDao.updateTask(updatedItem)
+                NotificationHelper.cancelNotification(context, item.id)
+            } else if (item.repeatMode != "None" && !isDone) {
+                // If user somehow tries to uncheck a recurring task that's done, ignore it if isDone is already true
+                if (item.isDone) return@launch
+                
+                val updatedItem = item.copy(
+                    isDone = false,
+                    completedAt = null
                 )
                 todoDao.updateTask(updatedItem)
                 NotificationHelper.scheduleNotification(context, updatedItem)
@@ -190,9 +243,15 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     private fun calculateNextDueDate(currentDate: Long, repeatMode: String): Long {
         val calendar = Calendar.getInstance()
         calendar.timeInMillis = currentDate
-        when (repeatMode) {
-            "Daily" -> calendar.add(Calendar.DAY_OF_YEAR, 1)
-            "Weekly" -> calendar.add(Calendar.WEEK_OF_YEAR, 1)
+        val now = System.currentTimeMillis()
+        
+        // Ensure the next due date is in the future
+        while (calendar.timeInMillis <= now) {
+            when (repeatMode) {
+                "Daily" -> calendar.add(Calendar.DAY_OF_YEAR, 1)
+                "Weekly" -> calendar.add(Calendar.WEEK_OF_YEAR, 1)
+                else -> break
+            }
         }
         return calendar.timeInMillis
     }

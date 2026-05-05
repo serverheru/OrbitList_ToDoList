@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Background belakang (Warna Putih Bersih sesuai permintaan) -->
+    <item>
+        <color android:color="#FFFFFF"/>
+    </item>
+
+    <!-- Logo Utama (Placeholder saat booting sistem) -->
+    <item
+        android:drawable="@mipmap/ic_launcher_foreground"
+        android:gravity="center" />
+
+    <!-- Agency logo dihapus dari sini agar muncul berurutan di MainActivity -->
+</layer-list>

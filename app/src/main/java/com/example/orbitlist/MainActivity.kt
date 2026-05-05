@@ -73,50 +73,151 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
+import androidx.compose.ui.res.painterResource
+import kotlinx.coroutines.delay
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        setTheme(R.style.Theme_School)
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             val context = LocalContext.current
-            val prefs = context.getSharedPreferences("OrbitListPrefs", Context.MODE_PRIVATE)
-            val themeStr = prefs.getString("global_theme", "Default") ?: "Default"
-            
-            val themeColors = when(themeStr) {
-                "Kuning" -> listOf(Color(0xFFFFD700).copy(0.15f), Color.Transparent)
-                "Hijau" -> listOf(Color(0xFF00FF41).copy(0.15f), Color.Transparent)
-                else -> listOf(ElectricIndigo.copy(0.15f), Color.Transparent)
-            }
-            val glowColor = when(themeStr) {
-                "Kuning" -> Color(0xFFFFD700)
-                "Hijau" -> Color(0xFF00FF41)
-                else -> ElectricIndigo
+            val prefs = remember { context.getSharedPreferences("OrbitListPrefs", Context.MODE_PRIVATE) }
+            var showLanding by remember { mutableStateOf(prefs.getBoolean("is_first_run", true)) }
+            var splashPhase by remember { mutableStateOf(0) } // 0: App Splash, 1: Agency Splash, 2: Content/Landing
+
+            LaunchedEffect(Unit) {
+                delay(1500)
+                splashPhase = 1
+                delay(1500)
+                splashPhase = 2
             }
 
-            SchoolTheme {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    var hasNotificationPermission by remember {
-                        mutableStateOf(
-                            ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.POST_NOTIFICATIONS
-                            ) == PackageManager.PERMISSION_GRANTED
-                        )
-                    }
-                    val permissionLauncher = rememberLauncherForActivityResult(
-                        contract = ActivityResultContracts.RequestPermission(),
-                        onResult = { isGranted ->
-                            hasNotificationPermission = isGranted
+            if (splashPhase < 2) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(if (splashPhase == 0) SpaceDark else Color(0xFF1A0B2E)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AnimatedContent(
+                        targetState = splashPhase,
+                        transitionSpec = {
+                            fadeIn(tween(500)) togetherWith fadeOut(tween(500))
+                        },
+                        label = "splashTransition"
+                    ) { phase ->
+                        if (phase == 0) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    "ORBIT LIST",
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 6.sp,
+                                    fontSize = 32.sp,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    "Orbitkan aktivitasmu",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White.copy(0.6f),
+                                    letterSpacing = 1.sp
+                                )
+                            }
+                        } else {
+                            Image(
+                                painter = painterResource(id = R.drawable.logo_agency),
+                                contentDescription = "Agency Logo",
+                                modifier = Modifier.size(200.dp)
+                            )
                         }
-                    )
-                    LaunchedEffect(Unit) {
-                        if (!hasNotificationPermission) {
-                            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                        NotificationHelper.scheduleDailyBriefing(context)
                     }
                 }
-                TodoApp(themeColors, glowColor)
+            } else if (showLanding) {
+                // Landing Page / Onboarding
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFF1A0B2E)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(32.dp)
+                    ) {
+                        Text(
+                            "SELAMAT DATANG",
+                            fontWeight = FontWeight.Black,
+                            fontSize = 28.sp,
+                            color = Color.White,
+                            letterSpacing = 4.sp
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            "Siap untuk mengorbitkan produktivitasmu ke tingkat selanjutnya?",
+                            textAlign = TextAlign.Center,
+                            color = Color.White.copy(0.7f),
+                            lineHeight = 24.sp
+                        )
+                        Spacer(modifier = Modifier.height(48.dp))
+                        Button(
+                            onClick = {
+                                prefs.edit().putBoolean("is_first_run", false).apply()
+                                showLanding = false
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth().height(56.dp)
+                        ) {
+                            Text(
+                                "MULAI SEKARANG",
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1A0B2E),
+                                letterSpacing = 2.sp
+                            )
+                        }
+                    }
+                }
+            } else {
+                val themeStr = prefs.getString("global_theme", "Default") ?: "Default"
+                
+                val themeColors = when(themeStr) {
+                    "Kuning" -> listOf(Color(0xFFFFD700).copy(0.15f), Color.Transparent)
+                    "Hijau" -> listOf(Color(0xFF00FF41).copy(0.15f), Color.Transparent)
+                    else -> listOf(ElectricIndigo.copy(0.15f), Color.Transparent)
+                }
+                val glowColor = when(themeStr) {
+                    "Kuning" -> Color(0xFFFFD700)
+                    "Hijau" -> Color(0xFF00FF41)
+                    else -> ElectricIndigo
+                }
+
+                SchoolTheme {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        var hasNotificationPermission by remember {
+                            mutableStateOf(
+                                ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.POST_NOTIFICATIONS
+                                ) == PackageManager.PERMISSION_GRANTED
+                            )
+                        }
+                        val permissionLauncher = rememberLauncherForActivityResult(
+                            contract = ActivityResultContracts.RequestPermission(),
+                            onResult = { isGranted ->
+                                hasNotificationPermission = isGranted
+                            }
+                        )
+                        LaunchedEffect(Unit) {
+                            if (!hasNotificationPermission) {
+                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                            NotificationHelper.scheduleDailyBriefing(context)
+                        }
+                    }
+                    TodoApp(themeColors, glowColor)
+                }
             }
         }
     }
@@ -176,7 +277,15 @@ fun TodoAppContent(
     var draggingOffset by remember { mutableStateOf(0f) }
 
     val totalTasks = filteredList.size
-    val completedTasks = filteredList.count { it.isDone }
+    val completedTasks = filteredList.count { 
+        if (selectedTab == 2) it.isDone 
+        else {
+            // For recurring tasks, consider it "done for today" if:
+            // 1. isDone is true (not yet rolled over)
+            // 2. OR it was completed in the last 24 hours (for Daily) or 7 days (for Weekly)
+            it.isDone || (it.completedAt != null && it.completedAt!! > System.currentTimeMillis() - 24 * 60 * 60 * 1000)
+        }
+    }
     val progressAnim by animateFloatAsState(
         targetValue = if (totalTasks > 0) completedTasks.toFloat() / totalTasks else 0f,
         animationSpec = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
@@ -191,9 +300,11 @@ fun TodoAppContent(
         else -> glowColor to listOf(glowColor, NeonCyan, glowColor)
     }
 
+    val appBackground = Color(0xFF050B18)
+
     Box(modifier = Modifier
         .fillMaxSize()
-        .background(SpaceDark)
+        .background(appBackground)
         .drawBehind {
             drawCircle(
                 Brush.radialGradient(themeColors),
@@ -215,14 +326,14 @@ fun TodoAppContent(
                         title = {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    "ORBITLIST",
+                                    "ORBIT LIST",
                                     fontWeight = FontWeight.Black,
                                     letterSpacing = 4.sp,
                                     style = MaterialTheme.typography.titleLarge,
                                     color = Color.White
                                 )
                                 Text(
-                                    "Kelola tugas harianmu dalam orbit yang teratur.",
+                                    "Kelola aktivitasmu dalam orbit yang teratur.",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = Color.White.copy(0.6f),
                                     fontWeight = FontWeight.Medium
@@ -282,7 +393,7 @@ fun TodoAppContent(
             bottomBar = {
                 val context = LocalContext.current
                 NavigationBar(
-                    containerColor = SpaceDark.copy(0.9f),
+                    containerColor = Color(0xFF050B18).copy(0.95f),
                     contentColor = Color.White,
                     tonalElevation = 0.dp
                 ) {
@@ -396,7 +507,7 @@ fun TodoAppContent(
                                         color = Color.White
                                     )
                                     Text(
-                                        if (selectedTab == 2) "PROGRES" else "RITME", 
+                                        if (selectedTab == 2) "PROGRES" else "PROGRES",
                                         fontSize = 9.sp, 
                                         fontWeight = FontWeight.Bold,
                                         letterSpacing = 1.sp, 
@@ -441,7 +552,7 @@ fun TodoAppContent(
                                         )
                                     }
                                     Text(
-                                        if (selectedTab == 2) "MISI" else "RUTINITAS", 
+                                        if (selectedTab == 2) "RENCANA" else "RUTINITAS",
                                         fontSize = 9.sp, 
                                         color = Color.White.copy(0.4f), 
                                         fontWeight = FontWeight.Bold
@@ -500,7 +611,13 @@ fun TodoAppContent(
                                         Text("TANGGUNGAN", fontSize = 8.sp, color = Color.White.copy(0.4f), fontWeight = FontWeight.Bold)
                                     } else {
                                         // Dashboard Orbit Berulang: Konsistensi (Ritme)
-                                        val displayStreak = if (totalTasks > 0 && completedTasks == totalTasks && streak == 0) 1 else streak
+                                        // Count tasks completed today for consistency visual
+                                        val completedToday = filteredList.count { 
+                                            it.completedAt != null && 
+                                            SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date(it.completedAt!!)) == 
+                                            SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
+                                        }
+                                        val displayStreak = if (totalTasks > 0 && completedToday == totalTasks) streak + 1 else streak
                                         
                                         val (label, color, segments) = when {
                                             displayStreak > 10 -> Triple("SEMPURNA", CyberGreen, 5)
@@ -547,9 +664,13 @@ fun TodoAppContent(
                                     progressAnim >= 1f -> "ORBIT AMAN ✓"
                                     selectedTab == 1 -> {
                                         when {
-                                            progressAnim > 0.5f -> "Ritme terjaga!"
-                                            progressAnim > 0.1f -> "Jangan putus siklusnya!"
-                                            else -> "Ayo buat putaran baru!"
+                                            progressAnim > 0.9f -> "SEDIKIT LAGI!"
+                                            progressAnim > 0.8f -> "HAMPIR SAMPAI."
+                                            progressAnim > 0.6f -> "SETENGAH PERJALANAN."
+                                            progressAnim > 0.4f -> "MULAI SERIUS!"
+                                            progressAnim > 0.2f -> "LANJUTKAN!"
+                                            progressAnim > 0.1f -> "AWALAN BAGUS."
+                                            else -> "MULAI AKTIVITAS!"
                                         }
                                     }
                                     else -> {
@@ -749,7 +870,7 @@ fun CyberDetailDialog(
             .fillMaxWidth(0.9f)
             .clip(RoundedCornerShape(32.dp))
             .border(1.dp, glowColor.copy(0.3f), RoundedCornerShape(32.dp)),
-        containerColor = SpaceDark,
+        containerColor = Color(0xFF0E1421),
         text = {
             Column(
                 modifier = Modifier
@@ -917,10 +1038,10 @@ fun CyberSettingsDialog(
             Button(onClick = {
                 onDismiss()
             }, colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)) {
-                Text("Tutup", color = SpaceDark)
+                Text("Tutup", color = Color(0xFF1A0B2E))
             }
         },
-        containerColor = SpaceDark,
+        containerColor = Color(0xFF0E1421),
         title = { Text("PENGATURAN", color = Color.White, fontWeight = FontWeight.Black) },
         text = {
             Column {
@@ -990,7 +1111,7 @@ fun CyberSettingsDialog(
                         },
                         modifier = Modifier.background(NeonCyan, RoundedCornerShape(8.dp))
                     ) {
-                        Icon(Icons.Default.Add, null, tint = SpaceDark)
+                        Icon(Icons.Default.Add, null, tint = Color(0xFF050B18))
                     }
                 }
 
@@ -1035,31 +1156,45 @@ fun CyberHelpDialog(onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         confirmButton = {
             Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)) {
-                Text("Paham, Komandan!", color = SpaceDark, fontWeight = FontWeight.Bold)
+                Text("Paham, Komandan!", color = Color(0xFF050B18), fontWeight = FontWeight.Bold)
             }
         },
-        containerColor = SpaceDark,
+        containerColor = Color(0xFF0E1421),
         modifier = Modifier.clip(RoundedCornerShape(24.dp)).border(1.dp, NeonCyan.copy(0.2f), RoundedCornerShape(24.dp)),
         title = { 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.RocketLaunch, null, tint = NeonCyan)
                 Spacer(modifier = Modifier.width(12.dp))
-                Text("MANUAL OPERASI", color = Color.White, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+                Text("MANUAL OPERASI LENGKAP", color = Color.White, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
             }
         },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                HelpSection("📅 Navigasi Terpisah", "Gunakan tab bawah untuk berpindah antar koordinat: 'Harian' untuk rutin harian, 'Mingguan' untuk jadwal mingguan, dan 'Agenda' untuk misi satu waktu.")
-                HelpSection("🎨 Warna Galaksi", "Setiap tab memiliki identitas warna: Kuning/Orange (Harian), Merah/Pink (Mingguan), dan Ungu/Biru (Agenda) untuk memudahkan navigasi visual.")
-                HelpSection("🔄 Konfirmasi Perpanjangan", "Misi berulang akan muncul dengan ikon gembok jika belum waktunya. Saat waktu tiba, klik gelembung untuk mengonfirmasi penyelesaian dan otomatis memperpanjang orbit ke siklus berikutnya.")
-                HelpSection("🚀 Kelola Misi (CRUD)", "Tambah misi dengan tombol '+' di bawah. Untuk mengubah atau menghapus, klik pada misi untuk membuka 'Menu Aksi' di bawahnya.")
-                HelpSection("📌 Pin & Prioritas", "Gunakan ikon Pin untuk menjaga misi penting tetap di atas. Prioritas memengaruhi warna lencana dan beban 'Tanggungan' di dashboard.")
-                HelpSection("🔍 Kategori & Filter", "Gunakan chip kategori di bawah dashboard untuk memfilter tampilan misi sesuai konteks aktivitasmu.")
-                HelpSection("🖱️ Menu Aksi", "Klik kartu misi untuk memunculkan opsi: Detail (Info), Pin, Edit, dan Hapus. Jika teks status menutupi tombol, geser sedikit atau tutup menu.")
-                HelpSection("📊 Log Penerbangan", "Klik ikon grafik untuk melihat distribusi misi antara Harian, Mingguan, dan Agenda serta efisiensi mingguanmu.")
-                HelpSection("🌐 Info Web", "Ikon bola dunia (Web) akan membawamu ke situs resmi OrbitList untuk panduan lebih lengkap dan berita galaksi.")
-                HelpSection(" Reorder (Drag & Drop)", "Tahan lama pada kartu misi, lalu geser untuk mengatur urutan prioritas eksekusi secara manual.")
-                HelpSection("⚙️ Pengaturan", "Atur nada dering notifikasi dan kelola daftar kategori misi melalui menu gerigi di pojok kanan atas.")
+                Text("NAVIGASI & STRUKTUR GALAKSI", fontWeight = FontWeight.Bold, color = NeonCyan, fontSize = 16.sp, modifier = Modifier.padding(bottom = 8.dp))
+                HelpSection("📅 Tab Koordinat", "OrbitList membagi tugas dalam 3 zona: 'Harian' (rutinitas harian), 'Mingguan' (rutinitas mingguan), dan 'Agenda' (misi sekali jalan/tugas umum).")
+                HelpSection("🎨 Identitas Visual", "Setiap zona memiliki warna unik: Kuning (Harian), Merah (Mingguan), dan Ungu (Agenda). Gunakan warna ini sebagai navigasi cepat mata Anda.")
+                HelpSection("🌐 Akses Ekosistem", "Ikon 'Web' di ujung kanan navbar menghubungkan Anda ke situs pusat OrbitList untuk informasi ekosistem aplikasi yang lebih luas.")
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("MEKANISME ORBIT BERULANG", fontWeight = FontWeight.Bold, color = NeonCyan, fontSize = 16.sp, modifier = Modifier.padding(bottom = 8.dp))
+                HelpSection("🔄 Sistem Loop Tunggal", "Tugas Harian/Mingguan tidak akan bertumpuk. Begitu selesai dikonfirmasi, tugas tersebut akan otomatis menjadwalkan dirinya sendiri ke hari/minggu berikutnya.")
+                HelpSection("🔒 Ikon Gembok", "Jika muncul ikon gembok, berarti orbit waktu belum tiba. Anda belum bisa menyelesaikan tugas tersebut sampai waktu yang ditentukan.")
+                HelpSection("📈 Progres & Ritme", "Indikator persentase di Tab Harian/Mingguan disebut 'Ritme'. Ini tetap menghitung keberhasilan Anda hari ini meskipun tugas sudah berpindah tanggal ke besok.")
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("DASHBOARD & ANALITIK", fontWeight = FontWeight.Bold, color = NeonCyan, fontSize = 16.sp, modifier = Modifier.padding(bottom = 8.dp))
+                HelpSection("⚖️ Meteran Tanggungan", "Di Tab Agenda, ada indikator beban kerja. Semakin banyak tugas prioritas 'Tinggi', meteran akan berubah dari 'Aman' menjadi 'Pusing' (Merah).")
+                HelpSection("🔥 Konsistensi (Streak)", "Di Tab Rutinitas, ada meteran konsistensi. Jika Anda menyelesaikan semua rutinitas harian tanpa putus, angka streak di dashboard akan terus bertambah.")
+                HelpSection("📊 Log Penerbangan", "Gunakan ikon grafik untuk melihat pembagian beban tugas Anda. Grafik ini membantu Anda melihat apakah hidup Anda terlalu berat di Agenda atau Rutinitas.")
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("MANAJEMEN MISI TINGKAT LANJUT", fontWeight = FontWeight.Bold, color = NeonCyan, fontSize = 16.sp, modifier = Modifier.padding(bottom = 8.dp))
+                HelpSection("🏷️ Kategori Kustom", "Anda bisa menambah atau menghapus kategori misi (seperti: Belajar, Gym, dll) melalui menu Pengaturan (ikon gerigi).")
+                HelpSection("📎 Lampiran & Deskripsi", "Setiap misi bisa menampung link URL (seperti dokumen atau meeting) dan deskripsi panjang. Cek bagian 'Info' pada menu aksi.")
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("NOTIFIKASI & ALARM", fontWeight = FontWeight.Bold, color = NeonCyan, fontSize = 16.sp, modifier = Modifier.padding(bottom = 8.dp))
+                HelpSection("🔔 Pengingat Orbit", "Aplikasi akan mengirimkan notifikasi saat waktu tugas tiba. Anda bisa mengatur nada dering khusus di menu Pengaturan agar tidak terlewat.")
             }
         }
     )
@@ -1093,7 +1228,7 @@ fun CyberFlightLogDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {},
-        containerColor = SpaceDark,
+        containerColor = Color(0xFF0E1421),
         modifier = Modifier.clip(RoundedCornerShape(24.dp)).border(1.dp, NeonCyan.copy(0.2f), RoundedCornerShape(24.dp)),
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1153,7 +1288,7 @@ fun CyberFlightLogDialog(
                 
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = NeonCyan), shape = RoundedCornerShape(12.dp)) {
-                    Text("KEMBALI KE ORBIT", color = SpaceDark, fontWeight = FontWeight.Bold)
+                    Text("KEMBALI KE ORBIT", color = Color(0xFF050B18), fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -1579,7 +1714,7 @@ fun CyberEmptyState(glowColor: Color) {
             Icon(Icons.Default.RocketLaunch, null, modifier = Modifier.size(60.dp), tint = glowColor)
         }
         Spacer(modifier = Modifier.height(24.dp))
-        Text("STASI BERSIH", fontWeight = FontWeight.Black, letterSpacing = 4.sp, color = Color.White)
+        Text("TIDAK ADA MISI", fontWeight = FontWeight.Black, letterSpacing = 4.sp, color = Color.White)
         Text("Menunggu misi selanjutnya...", color = Color.White.copy(0.5f), fontSize = 12.sp)
     }
 }
@@ -1637,7 +1772,7 @@ fun CyberAddEditSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = SpaceDark,
+        containerColor = Color(0xFF0E1421),
         scrimColor = Color.Black.copy(alpha = 0.6f),
         dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(0.2f)) }
     ) {

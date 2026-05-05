@@ -11,14 +11,18 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
+// Definisikan warna di luar class agar rapi
+val DeepBlueBlack = Color(0xFF050B18) // Biru kehitaman utama
+val SoftBlueBlack = Color(0xFF0E1421) // Sedikit lebih terang untuk kartu/surface
+
 private val DarkColorScheme = darkColorScheme(
     primary = ElectricIndigo,
     secondary = NeonCyan,
     tertiary = VividViolet,
-    background = SpaceDark,
-    surface = GlassSurface,
+    background = DeepBlueBlack,   // <--- Latar belakang utama
+    surface = SoftBlueBlack,      // <--- Latar belakang komponen (Card, dsb)
     onPrimary = Color.White,
-    onSecondary = SpaceDark,
+    onSecondary = Color.White,
     onTertiary = Color.White,
     onBackground = Color.White,
     onSurface = Color.White
@@ -28,13 +32,13 @@ private val LightColorScheme = lightColorScheme(
     primary = ElectricIndigo,
     secondary = NeonCyan,
     tertiary = VividViolet,
-    background = Color(0xFFF8FAFC),
-    surface = Color.White,
+    background = DeepBlueBlack,   // Disamakan jika ingin tema gelap di kedua mode
+    surface = SoftBlueBlack,
     onPrimary = Color.White,
     onSecondary = Color.White,
     onTertiary = Color.White,
-    onBackground = SpaceDark,
-    onSurface = SpaceDark
+    onBackground = Color.White,
+    onSurface = Color.White
 )
 
 @Composable

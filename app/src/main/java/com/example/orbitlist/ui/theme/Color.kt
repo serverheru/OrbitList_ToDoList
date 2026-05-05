@@ -3,12 +3,12 @@ package com.example.orbitlist.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // Next-Gen Cyber-Premium Palette
-val SpaceDark = Color(0xFF030712) // Near Black
+val SpaceDark = Color(0xFF04051F) // Near Black
 val DeepSpace = Color(0xFF0F172A) // Slate 900
 val GlassSurface = Color(0xCC1E293B) // Semi-transparent Slate
-val ElectricIndigo = Color(0xFF6366F1)
+val ElectricIndigo = Color(0xFF6D28C0)
 val NeonCyan = Color(0xFF06B6D4)
-val VividViolet = Color(0xFF8B5CF6)
+val VividViolet = Color(0xFF030334)
 val HotPink = Color(0xFFF43F5E)
 
 // Status with Glow potential

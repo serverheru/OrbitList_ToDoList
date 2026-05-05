@@ -48,7 +48,7 @@ class NotificationReceiver : BroadcastReceiver() {
         val notification = NotificationCompat.Builder(context, "quantum_task_notifications")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("$taskEmoji Misi OrbitList")
-            .setContentText("Waktunya mengerjakan: $taskName")
+            .setContentText("Waktunya: $taskName")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)

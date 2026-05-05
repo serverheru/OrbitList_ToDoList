@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- App Icon (OrbitList Foreground) -->
+    <item
+        android:drawable="@mipmap/ic_launcher_foreground"
+        android:gravity="center"
+        android:top="-15dp" />
+
+    <!-- Logo Agency (Ditempatkan di bawah logo utama) -->
+    <item
+        android:drawable="@drawable/logo_agency"
+        android:gravity="center"
+        android:top="35dp" />
+</layer-list>

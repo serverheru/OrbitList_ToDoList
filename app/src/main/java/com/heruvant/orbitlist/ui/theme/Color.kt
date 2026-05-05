@@ -1,4 +1,4 @@
-package com.example.orbitlist.ui.theme
+package com.heruvant.orbitlist.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

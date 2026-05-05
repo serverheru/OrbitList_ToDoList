@@ -1,4 +1,4 @@
-package com.example.orbitlist
+package com.heruvant.orbitlist
 
 import android.content.Context
 import android.content.Intent
@@ -28,7 +28,6 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -53,7 +52,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalFocusManager
@@ -67,13 +65,23 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.window.DialogProperties
-import com.example.orbitlist.ui.theme.*
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
 import androidx.compose.ui.res.painterResource
+import com.heruvant.orbitlist.ui.theme.CyberAmber
+import com.heruvant.orbitlist.ui.theme.CyberGreen
+import com.heruvant.orbitlist.ui.theme.CyberRed
+import com.heruvant.orbitlist.ui.theme.ElectricIndigo
+import com.heruvant.orbitlist.ui.theme.GlassSurface
+import com.heruvant.orbitlist.ui.theme.HotPink
+import com.heruvant.orbitlist.ui.theme.NeonCyan
+import com.heruvant.orbitlist.ui.theme.SchoolTheme
+import com.heruvant.orbitlist.ui.theme.SpaceDark
+import com.heruvant.orbitlist.ui.theme.VividViolet
+import androidx.compose.foundation.lazy.items
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
@@ -490,7 +498,11 @@ fun TodoAppContent(
                                     )
                                     drawArc(
                                         brush = Brush.sweepGradient(
-                                            if (progressAnim > 0.8f && selectedTab != 2) listOf(CyberGreen, NeonCyan, CyberGreen)
+                                            if (progressAnim > 0.8f && selectedTab != 2) listOf(
+                                                CyberGreen,
+                                                NeonCyan,
+                                                CyberGreen
+                                            )
                                             else tabColors
                                         ),
                                         startAngle = -90f,
@@ -526,7 +538,7 @@ fun TodoAppContent(
                                 filterCategory.uppercase(), 
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Black, 
-                                color = NeonCyan.copy(0.7f), 
+                                color = NeonCyan.copy(0.7f),
                                 letterSpacing = 2.sp
                             )
                             

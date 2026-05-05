@@ -1,4 +1,4 @@
-package com.example.orbitlist
+package com.heruvant.orbitlist
 
 import org.junit.Test
 

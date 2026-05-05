@@ -1,6 +1,11 @@
-package com.example.orbitlist
+package com.heruvant.orbitlist
 
-import androidx.room.*
+import androidx.room.Dao
+import androidx.room.Delete
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -8,7 +13,7 @@ interface TodoDao {
     @Query("SELECT * FROM todo_items ORDER BY isPinned DESC, position ASC, id ASC")
     fun getAllTasks(): Flow<List<TodoItem>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
     suspend fun addTask(item: TodoItem): Long
 
     @Update

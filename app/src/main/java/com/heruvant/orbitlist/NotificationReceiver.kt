@@ -1,4 +1,4 @@
-package com.example.orbitlist
+package com.heruvant.orbitlist
 
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -8,6 +8,7 @@ import android.content.Intent
 import android.media.RingtoneManager
 import android.net.Uri
 import androidx.core.app.NotificationCompat
+import com.heruvant.orbitlist.TodoDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -60,7 +61,7 @@ class NotificationReceiver : BroadcastReceiver() {
     }
 
     private fun showDailyBriefing(context: Context) {
-        val database = TodoDatabase.getDatabase(context)
+        val database = TodoDatabase.Companion.getDatabase(context)
         val todoDao = database.todoDao()
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -77,7 +78,7 @@ class NotificationReceiver : BroadcastReceiver() {
             if (todayTasks.isNotEmpty()) {
                 val title = "🚀 Laporan Briefing Pagi"
                 val message = "Kapten, ada ${todayTasks.size} misi yang menunggu dalam orbit hari ini. Mari kita selesaikan!"
-                
+
                 val mainIntent = Intent(context, MainActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                 }
@@ -103,4 +104,3 @@ class NotificationReceiver : BroadcastReceiver() {
         }
     }
 }
-

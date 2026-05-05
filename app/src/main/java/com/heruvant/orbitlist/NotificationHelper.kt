@@ -1,4 +1,4 @@
-package com.example.orbitlist
+package com.heruvant.orbitlist
 
 import android.app.AlarmManager
 import android.app.NotificationChannel
@@ -7,7 +7,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import java.util.*
+import java.util.Calendar
 
 object NotificationHelper {
     private const val CHANNEL_ID = "quantum_task_notifications"
@@ -75,7 +75,7 @@ object NotificationHelper {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val prefs = context.getSharedPreferences("OrbitListPrefs", Context.MODE_PRIVATE)
         val globalSoundUri = prefs.getString("global_sound_uri", null)
-        
+
         // Define the intervals: 1 hour before, 5 minutes before, and exactly at the time
         val intervals = listOf(
             -60 to " (1 Jam Lagi)",
@@ -136,7 +136,7 @@ object NotificationHelper {
 
     fun cancelNotification(context: Context, itemId: Int) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        
+
         // Cancel all three possible intervals
         listOf(0, -5, -60).forEach { offset ->
             val requestID = itemId * 10 + offset

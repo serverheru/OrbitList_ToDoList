@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -56,6 +57,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.input.pointer.pointerInput
@@ -124,12 +129,25 @@ fun TodoApp(
     glowColor: Color,
     viewModel: TodoViewModel = viewModel()
 ) {
+    CompositionLocalProvider(LocalHapticFeedback provides NoHapticFeedback()) {
+        TodoAppContent(themeColors, glowColor, viewModel)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+fun TodoAppContent(
+    themeColors: List<Color>,
+    glowColor: Color,
+    viewModel: TodoViewModel
+) {
     var editingItem by remember { mutableStateOf<TodoItem?>(null) }
     var detailItem by remember { mutableStateOf<TodoItem?>(null) }
     var showSheet by remember { mutableStateOf(false) }
     var showFlightLog by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: Misi Biasa, 1: Misi Berulang
+    var showHelp by remember { mutableStateOf(false) }
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: Harian, 1: Mingguan, 2: Agenda
     var filterCategory by remember { mutableStateOf("Semua") }
     val searchQuery by viewModel.searchQuery.collectAsState(initial = "")
     
@@ -137,13 +155,19 @@ fun TodoApp(
     val scope = rememberCoroutineScope()
     
     val todoList by viewModel.allTasks.collectAsState(initial = emptyList())
-    val categories = listOf("Umum", "Kerja", "Belajar", "Pribadi")
+    val streak by viewModel.streak.collectAsState()
+    val categories by viewModel.categories.collectAsState()
+    
     val filterCategories = listOf("Semua") + categories
     
     val filteredList = todoList.filter { 
         val matchesCategory = filterCategory == "Semua" || it.category == filterCategory
-        val isRecurring = it.repeatMode != "None"
-        val matchesTab = if (selectedTab == 0) !isRecurring else isRecurring
+        val matchesTab = when(selectedTab) {
+            0 -> it.repeatMode == "Daily"
+            1 -> it.repeatMode == "Weekly"
+            2 -> it.repeatMode == "None"
+            else -> false
+        }
         matchesCategory && matchesTab
     }
 
@@ -155,9 +179,17 @@ fun TodoApp(
     val completedTasks = filteredList.count { it.isDone }
     val progressAnim by animateFloatAsState(
         targetValue = if (totalTasks > 0) completedTasks.toFloat() / totalTasks else 0f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        animationSpec = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
         label = "progress"
     )
+
+    // Task 3: Thematic Colors
+    val (tabGlow, tabColors) = when(selectedTab) {
+        0 -> Color(0xFFFFD700) to listOf(Color(0xFFFFD700), Color(0xFFFF8C00), Color(0xFFFFD700)) // Harian: Yellow/Orange
+        1 -> Color(0xFFFF0000) to listOf(Color(0xFFFF0000), Color(0xFFFF69B4), Color(0xFFFF0000)) // Mingguan: Red/Pink
+        2 -> Color(0xFF8A2BE2) to listOf(Color(0xFF8A2BE2), Color(0xFF0000FF), Color(0xFF00FF41), Color(0xFF8A2BE2)) // Agenda: Purple/Blue/Green
+        else -> glowColor to listOf(glowColor, NeonCyan, glowColor)
+    }
 
     Box(modifier = Modifier
         .fillMaxSize()
@@ -198,8 +230,8 @@ fun TodoApp(
                             }
                         },
                         navigationIcon = {
-                            IconButton(onClick = { showFlightLog = true }) {
-                                Icon(Icons.Default.QueryStats, "Log Penerbangan", tint = NeonCyan)
+                            IconButton(onClick = { showHelp = true }) {
+                                Icon(Icons.Default.HelpOutline, "Petunjuk Aplikasi", tint = NeonCyan)
                             }
                         },
                         actions = {
@@ -248,45 +280,69 @@ fun TodoApp(
                 })
             },
             bottomBar = {
+                val context = LocalContext.current
                 NavigationBar(
                     containerColor = SpaceDark.copy(0.9f),
-                    contentColor = Color.White
+                    contentColor = Color.White,
+                    tonalElevation = 0.dp
                 ) {
                     NavigationBarItem(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
-                        icon = { Icon(Icons.Default.RocketLaunch, null) },
-                        label = { Text("Misi Utama", fontSize = 10.sp) },
+                        icon = { Icon(Icons.Default.Today, null) },
+                        label = { Text("Harian", fontSize = 9.sp, maxLines = 1) },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = NeonCyan,
+                            selectedIconColor = Color(0xFFFFD700),
                             unselectedIconColor = Color.White.copy(0.4f),
-                            selectedTextColor = NeonCyan,
+                            selectedTextColor = Color(0xFFFFD700),
                             unselectedTextColor = Color.White.copy(0.4f),
-                            indicatorColor = NeonCyan.copy(0.1f)
+                            indicatorColor = Color(0xFFFFD700).copy(0.1f)
                         )
                     )
                     NavigationBarItem(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
-                        icon = { Icon(Icons.Default.Loop, null) },
-                        label = { Text("Orbit Berulang", fontSize = 10.sp) },
+                        icon = { Icon(Icons.Default.DateRange, null) },
+                        label = { Text("Mingguan", fontSize = 9.sp, maxLines = 1) },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = glowColor,
+                            selectedIconColor = Color(0xFFFF0000),
                             unselectedIconColor = Color.White.copy(0.4f),
-                            selectedTextColor = glowColor,
+                            selectedTextColor = Color(0xFFFF0000),
                             unselectedTextColor = Color.White.copy(0.4f),
-                            indicatorColor = glowColor.copy(0.1f)
+                            indicatorColor = Color(0xFFFF0000).copy(0.1f)
                         )
                     )
-                    val context = LocalContext.current
+                    NavigationBarItem(
+                        selected = selectedTab == 2,
+                        onClick = { selectedTab = 2 },
+                        icon = { Icon(Icons.Default.RocketLaunch, null) },
+                        label = { Text("Agenda", fontSize = 9.sp, maxLines = 1) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = Color(0xFF8A2BE2),
+                            unselectedIconColor = Color.White.copy(0.4f),
+                            selectedTextColor = Color(0xFF8A2BE2),
+                            unselectedTextColor = Color.White.copy(0.4f),
+                            indicatorColor = Color(0xFF8A2BE2).copy(0.1f)
+                        )
+                    )
+                    NavigationBarItem(
+                        selected = false,
+                        onClick = { showFlightLog = true },
+                        icon = { Icon(Icons.Default.QueryStats, null) },
+                        label = { Text("Stats", fontSize = 9.sp, maxLines = 1) },
+                        colors = NavigationBarItemDefaults.colors(
+                            unselectedIconColor = Color.White.copy(0.4f),
+                            unselectedTextColor = Color.White.copy(0.4f)
+                        )
+                    )
                     NavigationBarItem(
                         selected = false,
                         onClick = {
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://orbitlistapp.vercel.app/"))
                             context.startActivity(intent)
                         },
-                        icon = { Icon(Icons.Default.Link, null) },
-                        label = { Text("Info Web", fontSize = 10.sp) },
+                        icon = { Icon(Icons.Default.Language, null) },
+                        label = { Text("Web", fontSize = 9.sp, maxLines = 1) },
                         colors = NavigationBarItemDefaults.colors(
                             unselectedIconColor = Color.White.copy(0.4f),
                             unselectedTextColor = Color.White.copy(0.4f)
@@ -299,78 +355,218 @@ fun TodoApp(
                 
                 GlassCard(
                     modifier = Modifier.padding(16.dp),
-                    glowColor = if (progressAnim > 0.8f) CyberGreen.copy(0.2f) else glowColor.copy(0.2f)
+                    glowColor = if (progressAnim > 0.8f) CyberGreen.copy(0.2f) else tabGlow.copy(0.2f)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(24.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+                            .padding(vertical = 24.dp, horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(90.dp)) {
-                            Canvas(modifier = Modifier.fillMaxSize()) {
-                                drawArc(
-                                    color = Color.White.copy(0.05f),
-                                    startAngle = 0f,
-                                    sweepAngle = 360f,
-                                    useCenter = false,
-                                    style = Stroke(width = 10f, cap = StrokeCap.Round)
-                                )
-                                drawArc(
-                                    brush = Brush.sweepGradient(
-                                        if (progressAnim > 0.8f) listOf(CyberGreen, NeonCyan, CyberGreen)
-                                        else listOf(glowColor, NeonCyan, glowColor)
-                                    ),
-                                    startAngle = -90f,
-                                    sweepAngle = progressAnim * 360f,
-                                    useCenter = false,
-                                    style = Stroke(width = 10f, cap = StrokeCap.Round)
-                                )
-                            }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    "${(progressAnim * 100).toInt()}%", 
-                                    fontWeight = FontWeight.Black, 
-                                    fontSize = 20.sp, 
-                                    color = Color.White
-                                )
-                                Text(
-                                    "SIAP", 
-                                    fontSize = 9.sp, 
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.sp, 
-                                    color = if (progressAnim > 0.8f) CyberGreen else NeonCyan
-                                )
+                        // Section 1: Progress Circle (Fixed weight to prevent shifting)
+                        Box(
+                            contentAlignment = Alignment.Center, 
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(90.dp)) {
+                                Canvas(modifier = Modifier.fillMaxSize()) {
+                                    drawArc(
+                                        color = Color.White.copy(0.05f),
+                                        startAngle = 0f,
+                                        sweepAngle = 360f,
+                                        useCenter = false,
+                                        style = Stroke(width = 10f, cap = StrokeCap.Round)
+                                    )
+                                    drawArc(
+                                        brush = Brush.sweepGradient(
+                                            if (progressAnim > 0.8f && selectedTab != 2) listOf(CyberGreen, NeonCyan, CyberGreen)
+                                            else tabColors
+                                        ),
+                                        startAngle = -90f,
+                                        sweepAngle = progressAnim * 360f,
+                                        useCenter = false,
+                                        style = Stroke(width = 10f, cap = StrokeCap.Round)
+                                    )
+                                }
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        "${(progressAnim * 100).toInt()}%", 
+                                        fontWeight = FontWeight.Black, 
+                                        fontSize = 20.sp, 
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        if (selectedTab == 2) "PROGRES" else "RITME", 
+                                        fontSize = 9.sp, 
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 1.sp, 
+                                        color = if (progressAnim > 0.8f) CyberGreen else tabGlow
+                                    )
+                                }
                             }
                         }
                         
-                        Spacer(modifier = Modifier.width(40.dp))
-                        
-                        Column {
+                        // Section 2: Stats Dashboard
+                        Column(
+                            modifier = Modifier.weight(1.4f).padding(start = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
                             Text(
                                 filterCategory.uppercase(), 
-                                style = MaterialTheme.typography.labelMedium,
+                                style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Black, 
-                                color = NeonCyan, 
+                                color = NeonCyan.copy(0.7f), 
                                 letterSpacing = 2.sp
                             )
-                            Text(
-                                "$completedTasks / $totalTasks", 
-                                style = MaterialTheme.typography.headlineMedium, 
-                                fontWeight = FontWeight.Black, 
-                                color = Color.White
-                            )
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Stat 1: Mission / Routine
+                                Column {
+                                    AnimatedContent(
+                                        targetState = "$completedTasks/$totalTasks",
+                                        transitionSpec = {
+                                            fadeIn(tween(220)) togetherWith fadeOut(tween(90))
+                                        },
+                                        label = "taskCount"
+                                    ) { target ->
+                                        Text(
+                                            target, 
+                                            style = MaterialTheme.typography.titleLarge, 
+                                            fontWeight = FontWeight.Black, 
+                                            color = Color.White
+                                        )
+                                    }
+                                    Text(
+                                        if (selectedTab == 2) "MISI" else "RUTINITAS", 
+                                        fontSize = 9.sp, 
+                                        color = Color.White.copy(0.4f), 
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                // Divider
+                                Box(modifier = Modifier.width(1.dp).height(24.dp).background(Color.White.copy(0.1f)))
+
+                                // Stat 2: Tanggungan / Konsistensi
+                                Column(horizontalAlignment = Alignment.Start) {
+                                    if (selectedTab == 2) {
+                                        val load = filteredList
+                                            .filter { !it.isDone }
+                                            .sumOf { 
+                                                when(it.priority) {
+                                                    2 -> 3 // Tinggi
+                                                    1 -> 2 // Sedang
+                                                    else -> 1 // Rendah
+                                                }
+                                            }
+                                        
+                                        val (label, color, segments) = when {
+                                            load > 10 -> Triple("PUSING", CyberRed, 5)
+                                            load > 6 -> Triple("TINGGI", CyberAmber, 4)
+                                            load > 3 -> Triple("SEDANG", Color.Yellow, 3)
+                                            load > 0 -> Triple("AMAN", CyberGreen, 2)
+                                            else -> Triple("SANTAI", NeonCyan, 1)
+                                        }
+
+                                        // Segmented Meter Visual
+                                        Row(
+                                            modifier = Modifier.padding(bottom = 4.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                            verticalAlignment = Alignment.Bottom
+                                        ) {
+                                            repeat(5) { index ->
+                                                val isActive = index < segments
+                                                Box(
+                                                    modifier = Modifier
+                                                        .width(4.dp)
+                                                        .height(8.dp + (index * 2).dp)
+                                                        .clip(RoundedCornerShape(1.dp))
+                                                        .background(if (isActive) color else Color.White.copy(0.1f))
+                                                )
+                                            }
+                                        }
+
+                                        Text(
+                                            label, 
+                                            style = MaterialTheme.typography.labelSmall, 
+                                            fontWeight = FontWeight.Black, 
+                                            color = color,
+                                            letterSpacing = 1.sp
+                                        )
+                                        Text("TANGGUNGAN", fontSize = 8.sp, color = Color.White.copy(0.4f), fontWeight = FontWeight.Bold)
+                                    } else {
+                                        // Dashboard Orbit Berulang: Konsistensi (Ritme)
+                                        val displayStreak = if (totalTasks > 0 && completedTasks == totalTasks && streak == 0) 1 else streak
+                                        
+                                        val (label, color, segments) = when {
+                                            displayStreak > 10 -> Triple("SEMPURNA", CyberGreen, 5)
+                                            displayStreak > 5 -> Triple("STABIL", NeonCyan, 4)
+                                            displayStreak > 2 -> Triple("LANCAR", Color.Yellow, 3)
+                                            displayStreak > 0 -> Triple("MULAI", CyberAmber, 2)
+                                            else -> Triple("PUTUS", Color.White.copy(0.3f), 1)
+                                        }
+
+                                        Row(
+                                            modifier = Modifier.padding(bottom = 4.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                            verticalAlignment = Alignment.Bottom
+                                        ) {
+                                            repeat(5) { index ->
+                                                val isActive = index < segments
+                                                Box(
+                                                    modifier = Modifier
+                                                        .width(4.dp)
+                                                        .height(8.dp + (index * 2).dp)
+                                                        .clip(RoundedCornerShape(1.dp))
+                                                        .background(if (isActive) color else Color.White.copy(0.1f))
+                                                )
+                                            }
+                                        }
+
+                                        Text(
+                                            label, 
+                                            style = MaterialTheme.typography.labelSmall, 
+                                            fontWeight = FontWeight.Black, 
+                                            color = color,
+                                            letterSpacing = 1.sp
+                                        )
+                                        Text("KONSISTENSI", fontSize = 8.sp, color = Color.White.copy(0.4f), fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+                            
+                            // Status Message with pulsing effect if 100%
                             Text(
                                 when {
-                                    progressAnim >= 1f -> "MISI SELESAI!"
-                                    progressAnim > 0.8f -> "HAMPIR TIBA"
-                                    progressAnim > 0.5f -> "SETENGAH JALAN"
-                                    progressAnim > 0.2f -> "DALAM ORBIT"
-                                    else -> "MULAI MISI"
+                                    progressAnim >= 1f -> "ORBIT AMAN ✓"
+                                    selectedTab == 1 -> {
+                                        when {
+                                            progressAnim > 0.5f -> "Ritme terjaga!"
+                                            progressAnim > 0.1f -> "Jangan putus siklusnya!"
+                                            else -> "Ayo buat putaran baru!"
+                                        }
+                                    }
+                                    else -> {
+                                        when {
+                                            progressAnim > 0.9f -> "SEDIKIT LAGI!"
+                                            progressAnim > 0.8f -> "HAMPIR SAMPAI."
+                                            progressAnim > 0.6f -> "SETENGAH PERJALANAN."
+                                            progressAnim > 0.4f -> "MULAI SERIUS!"
+                                            progressAnim > 0.2f -> "LANJUTKAN!"
+                                            progressAnim > 0.1f -> "AWALAN BAGUS."
+                                            else -> "MULAI AKTIVITAS!"
+                                        }
+                                    }
                                 }, 
-                                style = MaterialTheme.typography.bodySmall, 
-                                color = Color.White.copy(0.5f)
+                                style = MaterialTheme.typography.labelSmall, 
+                                color = if (progressAnim >= 1f) CyberGreen else Color.White.copy(0.5f),
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
@@ -467,7 +663,10 @@ fun TodoApp(
     }
 
     if (showSettings) {
-        CyberSettingsDialog(onDismiss = { showSettings = false })
+        CyberSettingsDialog(
+            viewModel = viewModel,
+            onDismiss = { showSettings = false }
+        )
     }
 
     if (showFlightLog) {
@@ -477,11 +676,17 @@ fun TodoApp(
         )
     }
 
+    if (showHelp) {
+        CyberHelpDialog(onDismiss = { showHelp = false })
+    }
+
     if (showSheet) {
         CyberAddEditSheet(
             glowColor = glowColor,
             item = editingItem,
             sheetState = sheetState,
+            categories = categories,
+            initialTab = selectedTab,
             onDismiss = { showSheet = false },
             onSave = { text, desc, p, c, e, d, t, r, l, s ->
                 scope.launch { sheetState.hide() }.invokeOnCompletion {
@@ -520,6 +725,12 @@ fun TodoApp(
                 showSheet = true
             }
         )
+    }
+}
+
+class NoHapticFeedback : HapticFeedback {
+    override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) {
+        // Do nothing to suppress vibration
     }
 }
 
@@ -677,12 +888,15 @@ fun CyberDetailDialog(
 }
 
 @Composable
-fun CyberSettingsDialog(onDismiss: () -> Unit) {
+fun CyberSettingsDialog(
+    viewModel: TodoViewModel,
+    onDismiss: () -> Unit
+) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("OrbitListPrefs", Context.MODE_PRIVATE)
     var currentSoundUri by remember { mutableStateOf(prefs.getString("global_sound_uri", null)) }
-    var currentLanguage by remember { mutableStateOf(prefs.getString("global_lang", "Indonesia")) }
-    var currentTheme by remember { mutableStateOf(prefs.getString("global_theme", "Default")) }
+    val categories by viewModel.categories.collectAsState()
+    var newCategoryName by remember { mutableStateOf("") }
 
     val ringtoneLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult(),
@@ -728,9 +942,135 @@ fun CyberSettingsDialog(onDismiss: () -> Unit) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(if (currentSoundUri == null) "Pilih Nada Dering" else "Nada Dering Terpilih")
                 }
+
+                Spacer(modifier = Modifier.height(24.dp))
+                Text("BAGIKAN APLIKASI", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonCyan)
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, "Kelola tugasmu dalam orbit yang teratur dengan OrbitList! Kunjungi: https://orbitlistapp.vercel.app/")
+                        }
+                        context.startActivity(Intent.createChooser(shareIntent, "Bagikan OrbitList"))
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan.copy(0.1f))
+                ) {
+                    Icon(Icons.Default.Share, null, tint = NeonCyan, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Rekomendasikan ke Teman", color = NeonCyan)
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+                Text("MANAJEMEN KATEGORI", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonCyan)
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    TextField(
+                        value = newCategoryName,
+                        onValueChange = { newCategoryName = it },
+                        placeholder = { Text("Nama Kategori...", fontSize = 12.sp, color = Color.White.copy(0.3f)) },
+                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.White.copy(0.05f),
+                            unfocusedContainerColor = Color.White.copy(0.05f),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        ),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(
+                        onClick = {
+                            if (newCategoryName.isNotBlank()) {
+                                viewModel.addCategory(newCategoryName)
+                                newCategoryName = ""
+                            }
+                        },
+                        modifier = Modifier.background(NeonCyan, RoundedCornerShape(8.dp))
+                    ) {
+                        Icon(Icons.Default.Add, null, tint = SpaceDark)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Horizontal list of deletable categories
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    categories.forEach { cat ->
+                        Surface(
+                            color = Color.White.copy(0.05f),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, Color.White.copy(0.1f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(cat, fontSize = 11.sp, color = Color.White)
+                                if (categories.size > 1) {
+                                    IconButton(
+                                        onClick = { viewModel.removeCategory(cat) },
+                                        modifier = Modifier.size(24.dp).padding(start = 4.dp)
+                                    ) {
+                                        Icon(Icons.Default.Close, null, tint = CyberRed, modifier = Modifier.size(14.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     )
+}
+
+@Composable
+fun CyberHelpDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)) {
+                Text("Paham, Komandan!", color = SpaceDark, fontWeight = FontWeight.Bold)
+            }
+        },
+        containerColor = SpaceDark,
+        modifier = Modifier.clip(RoundedCornerShape(24.dp)).border(1.dp, NeonCyan.copy(0.2f), RoundedCornerShape(24.dp)),
+        title = { 
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.RocketLaunch, null, tint = NeonCyan)
+                Spacer(modifier = Modifier.width(12.dp))
+                Text("MANUAL OPERASI", color = Color.White, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+            }
+        },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                HelpSection("📅 Navigasi Terpisah", "Gunakan tab bawah untuk berpindah antar koordinat: 'Harian' untuk rutin harian, 'Mingguan' untuk jadwal mingguan, dan 'Agenda' untuk misi satu waktu.")
+                HelpSection("🎨 Warna Galaksi", "Setiap tab memiliki identitas warna: Kuning/Orange (Harian), Merah/Pink (Mingguan), dan Ungu/Biru (Agenda) untuk memudahkan navigasi visual.")
+                HelpSection("🔄 Konfirmasi Perpanjangan", "Misi berulang akan muncul dengan ikon gembok jika belum waktunya. Saat waktu tiba, klik gelembung untuk mengonfirmasi penyelesaian dan otomatis memperpanjang orbit ke siklus berikutnya.")
+                HelpSection("🚀 Kelola Misi (CRUD)", "Tambah misi dengan tombol '+' di bawah. Untuk mengubah atau menghapus, klik pada misi untuk membuka 'Menu Aksi' di bawahnya.")
+                HelpSection("📌 Pin & Prioritas", "Gunakan ikon Pin untuk menjaga misi penting tetap di atas. Prioritas memengaruhi warna lencana dan beban 'Tanggungan' di dashboard.")
+                HelpSection("🔍 Kategori & Filter", "Gunakan chip kategori di bawah dashboard untuk memfilter tampilan misi sesuai konteks aktivitasmu.")
+                HelpSection("🖱️ Menu Aksi", "Klik kartu misi untuk memunculkan opsi: Detail (Info), Pin, Edit, dan Hapus. Jika teks status menutupi tombol, geser sedikit atau tutup menu.")
+                HelpSection("📊 Log Penerbangan", "Klik ikon grafik untuk melihat distribusi misi antara Harian, Mingguan, dan Agenda serta efisiensi mingguanmu.")
+                HelpSection("🌐 Info Web", "Ikon bola dunia (Web) akan membawamu ke situs resmi OrbitList untuk panduan lebih lengkap dan berita galaksi.")
+                HelpSection(" Reorder (Drag & Drop)", "Tahan lama pada kartu misi, lalu geser untuk mengatur urutan prioritas eksekusi secara manual.")
+                HelpSection("⚙️ Pengaturan", "Atur nada dering notifikasi dan kelola daftar kategori misi melalui menu gerigi di pojok kanan atas.")
+            }
+        }
+    )
+}
+
+@Composable
+fun HelpSection(title: String, desc: String) {
+    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+        Text(title, fontWeight = FontWeight.Bold, color = NeonCyan, fontSize = 14.sp)
+        Text(desc, color = Color.White.copy(0.7f), fontSize = 12.sp, lineHeight = 18.sp)
+    }
 }
 
 @Composable
@@ -746,8 +1086,9 @@ fun CyberFlightLogDialog(
         it.createdAt > System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000 
     }
     
-    val regularMissions = todoList.filter { it.repeatMode == "None" }
-    val recurringMissions = todoList.filter { it.repeatMode != "None" }
+    val harianMissions = todoList.filter { it.repeatMode == "Daily" }
+    val mingguanMissions = todoList.filter { it.repeatMode == "Weekly" }
+    val agendaMissions = todoList.filter { it.repeatMode == "None" }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -763,24 +1104,39 @@ fun CyberFlightLogDialog(
                 
                 Spacer(modifier = Modifier.height(24.dp))
                 
-                // Mini Bar Chart
+                // Mini Bar Chart - Task 5 Split
                 Row(
-                    modifier = Modifier.fillMaxWidth().height(100.dp).padding(horizontal = 16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.Bottom
                 ) {
-                    val maxVal = maxOf(regularMissions.size, recurringMissions.size, 1)
-                    ChartBar("Misi Biasa", regularMissions.size, maxVal, NeonCyan)
-                    ChartBar("Misi Berulang", recurringMissions.size, maxVal, ElectricIndigo)
+                    val maxVal = maxOf(harianMissions.size, mingguanMissions.size, agendaMissions.size, 5)
+                    ChartBar("Harian", harianMissions.size, maxVal, Color(0xFFFFD700))
+                    ChartBar("Mingguan", mingguanMissions.size, maxVal, Color(0xFFFF0000))
+                    ChartBar("Agenda", agendaMissions.size, maxVal, Color(0xFF8A2BE2))
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
                 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     StatItem("TOTAL SELESAI", todoList.count { it.isDone }.toString())
+                    StatItem("DALAM ORBIT", todoList.count { !it.isDone }.toString())
                 }
                 
                 Spacer(modifier = Modifier.height(16.dp))
+                
+                val highPriorityCount = todoList.count { !it.isDone && it.priority == 2 }
+                if (highPriorityCount > 0) {
+                    Text(
+                        "⚠️ $highPriorityCount MISI KRITIS TERDETEKSI", 
+                        style = MaterialTheme.typography.labelSmall, 
+                        color = CyberRed,
+                        fontWeight = FontWeight.Black
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
                 
                 GlassCard(modifier = Modifier.padding(8.dp), glowColor = NeonCyan.copy(0.1f)) {
                     Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -805,18 +1161,58 @@ fun CyberFlightLogDialog(
 }
 
 @Composable
-fun ChartBar(label: String, value: Int, maxVal: Int, color: Color) {
-    val heightFactor = value.toFloat() / maxVal
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value.toString(), color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+fun ChartBar(label: String, value: Int, maxOfAll: Int, color: Color) {
+    val heightAnim by animateFloatAsState(
+        targetValue = if (maxOfAll > 0) value.toFloat() / maxOfAll else 0f,
+        animationSpec = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
+        label = "chartHeight"
+    )
+    
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.width(80.dp)
+    ) {
+        Text(
+            value.toString(), 
+            color = Color.White, 
+            fontSize = 12.sp, 
+            fontWeight = FontWeight.Black
+        )
+        
+        Spacer(modifier = Modifier.height(4.dp))
+        
+        // Fixed container for the bar area
         Box(
             modifier = Modifier
+                .height(100.dp)
                 .width(40.dp)
-                .fillMaxHeight(heightFactor.coerceAtLeast(0.1f))
-                .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
-                .background(color)
+                .background(Color.White.copy(0.05f), RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(heightAnim.coerceIn(0.05f, 1f))
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(color, color.copy(0.6f))
+                        )
+                    )
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        Text(
+            label, 
+            color = Color.White.copy(0.6f), 
+            fontSize = 10.sp, 
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
-        Text(label, color = Color.White.copy(0.5f), fontSize = 8.sp, modifier = Modifier.padding(top = 4.dp))
     }
 }
 
@@ -895,14 +1291,37 @@ fun CyberTodoRow(glowColor: Color, item: TodoItem, onToggle: () -> Unit, onDelet
         else -> CyberGreen
     }
     
-    val alpha by animateFloatAsState(if (item.isDone) 0.5f else 1f, label = "alpha")
-    val scale by animateFloatAsState(if (item.isDone) 0.98f else 1f, label = "scale")
+    val isRecurring = item.repeatMode != "None"
+    val isDue = remember(item.dueDate, item.dueTime) {
+        val now = Calendar.getInstance()
+        val target = Calendar.getInstance()
+        if (item.dueDate != null) {
+            target.timeInMillis = item.dueDate
+            if (item.dueTime != null) {
+                val parts = item.dueTime.split(":")
+                target.set(Calendar.HOUR_OF_DAY, parts[0].toInt())
+                target.set(Calendar.MINUTE, parts[1].toInt())
+                target.set(Calendar.SECOND, 0)
+            } else {
+                target.set(Calendar.HOUR_OF_DAY, 0)
+                target.set(Calendar.MINUTE, 0)
+                target.set(Calendar.SECOND, 0)
+            }
+            now.timeInMillis >= target.timeInMillis
+        } else true
+    }
+
+    var isExtending by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    val alpha by animateFloatAsState(if (item.isDone || isExtending) 0.5f else 1f, label = "alpha")
+    val scale by animateFloatAsState(if (item.isDone || isExtending) 0.98f else 1f, label = "scale")
     var isExpanded by remember { mutableStateOf(false) }
     
     Surface(
         onClick = { isExpanded = !isExpanded },
         shape = RoundedCornerShape(24.dp),
-        color = if (item.isDone) Color.White.copy(0.02f) else GlassSurface.copy(alpha = 0.4f),
+        color = if (item.isDone || isExtending) Color.White.copy(0.02f) else GlassSurface.copy(alpha = 0.4f),
         modifier = Modifier
             .fillMaxWidth()
             .scale(scale)
@@ -938,7 +1357,7 @@ fun CyberTodoRow(glowColor: Color, item: TodoItem, onToggle: () -> Unit, onDelet
                             fontWeight = FontWeight.Bold, 
                             fontSize = 17.sp, 
                             color = Color.White,
-                            style = if (item.isDone) MaterialTheme.typography.bodyLarge.copy(textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough) else MaterialTheme.typography.bodyLarge
+                            style = if (item.isDone || isExtending) MaterialTheme.typography.bodyLarge.copy(textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough) else MaterialTheme.typography.bodyLarge
                         )
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
@@ -956,9 +1375,9 @@ fun CyberTodoRow(glowColor: Color, item: TodoItem, onToggle: () -> Unit, onDelet
                             )
                         }
 
-                        if (item.repeatMode != "None") {
+                        if (isRecurring) {
                             Spacer(modifier = Modifier.width(8.dp))
-                            Icon(Icons.Default.Refresh, null, modifier = Modifier.size(12.dp), tint = NeonCyan)
+                            Icon(Icons.Default.Refresh, null, modifier = Modifier.size(12.dp), tint = if(isDue) glowColor else NeonCyan)
                         }
 
                         if (item.attachmentLink.isNotBlank()) {
@@ -968,7 +1387,7 @@ fun CyberTodoRow(glowColor: Color, item: TodoItem, onToggle: () -> Unit, onDelet
                         
                         if (item.dueDate != null || item.dueTime != null) {
                             Spacer(modifier = Modifier.width(8.dp))
-                            Icon(Icons.Default.Schedule, null, modifier = Modifier.size(12.dp), tint = Color.White.copy(0.4f))
+                            Icon(Icons.Default.Schedule, null, modifier = Modifier.size(12.dp), tint = if(isRecurring && !isDue) NeonCyan else Color.White.copy(0.4f))
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = buildString {
@@ -982,27 +1401,60 @@ fun CyberTodoRow(glowColor: Color, item: TodoItem, onToggle: () -> Unit, onDelet
                                     }
                                 },
                                 fontSize = 11.sp, 
-                                color = Color.White.copy(0.4f)
+                                color = if(isRecurring && !isDue) NeonCyan else Color.White.copy(0.4f),
+                                fontWeight = if(isRecurring && !isDue) FontWeight.Bold else FontWeight.Normal
                             )
                         }
                     }
                 }
 
-                IconButton(
-                    onClick = onToggle, 
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    val checkScale by animateFloatAsState(if (item.isDone) 1.2f else 1f)
+                if (!isRecurring || isDue) {
+                    IconButton(
+                        onClick = {
+                            if (isRecurring && isDue && !isExtending) {
+                                isExtending = true
+                                scope.launch {
+                                    kotlinx.coroutines.delay(600)
+                                    onToggle()
+                                    isExtending = false
+                                }
+                            } else if (!isRecurring) {
+                                onToggle()
+                            }
+                        }, 
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        val checkScale by animateFloatAsState(
+                            targetValue = if (item.isDone || isExtending) 1.2f else 1f,
+                            animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(26.dp)
+                                .scale(checkScale)
+                                .clip(CircleShape)
+                                .border(2.dp, if (item.isDone || isExtending) pColor else Color.White.copy(0.2f), CircleShape)
+                                .background(if (item.isDone || isExtending) pColor else Color.Transparent),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (item.isDone || isExtending) Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp), tint = SpaceDark)
+                            else if (isRecurring) Icon(Icons.Default.Autorenew, null, modifier = Modifier.size(14.dp), tint = Color.White.copy(0.4f))
+                        }
+                    }
+                } else {
+                    // Task is recurring but not due yet
                     Box(
                         modifier = Modifier
-                            .size(26.dp)
-                            .scale(checkScale)
-                            .clip(CircleShape)
-                            .border(2.dp, if (item.isDone) pColor else Color.White.copy(0.2f), CircleShape)
-                            .background(if (item.isDone) pColor else Color.Transparent),
+                            .size(36.dp)
+                            .padding(4.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (item.isDone) Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp), tint = SpaceDark)
+                        Icon(
+                            Icons.Default.LockClock, 
+                            null, 
+                            tint = Color.White.copy(0.15f),
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
             }
@@ -1015,6 +1467,8 @@ fun CyberTodoRow(glowColor: Color, item: TodoItem, onToggle: () -> Unit, onDelet
                 Column {
                     Spacer(modifier = Modifier.height(16.dp))
                     Divider(color = Color.White.copy(0.05f))
+                    
+                    // Action Buttons Row (Placed Above for better access)
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp), 
                         horizontalArrangement = Arrangement.End,
@@ -1037,6 +1491,33 @@ fun CyberTodoRow(glowColor: Color, item: TodoItem, onToggle: () -> Unit, onDelet
                         }
                         IconButton(onClick = onDelete) {
                             Icon(Icons.Default.DeleteOutline, null, tint = CyberRed.copy(0.6f), modifier = Modifier.size(18.dp))
+                        }
+                    }
+
+                    // Status Text (Placed Below to avoid push-out)
+                    if (isRecurring) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), contentAlignment = Alignment.CenterEnd) {
+                            if (!isDue) {
+                                Text(
+                                    "Orbit belum tiba di koordinat waktu.", 
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = NeonCyan.copy(0.5f),
+                                    fontWeight = FontWeight.Medium,
+                                    textAlign = TextAlign.End
+                                )
+                            } else {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.ErrorOutline, null, tint = glowColor, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        "Konfirmasi untuk perpanjang orbit.", 
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = glowColor,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.End
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1109,21 +1590,41 @@ fun CyberAddEditSheet(
     glowColor: Color,
     item: TodoItem?,
     sheetState: SheetState,
+    categories: List<String>,
+    initialTab: Int = 0,
     onDismiss: () -> Unit, 
     onSave: (String, String, Int, String, String, Long?, String?, String, String, String?) -> Unit
 ) {
     var text by remember { mutableStateOf(item?.task ?: "") }
     var description by remember { mutableStateOf(item?.description ?: "") }
     var priority by remember { mutableIntStateOf(item?.priority ?: 1) }
-    var category by remember { mutableStateOf(item?.category ?: "Umum") }
+    var category by remember { mutableStateOf(item?.category ?: if (categories.isNotEmpty()) categories[0] else "Umum") }
     var emoji by remember { mutableStateOf(item?.emoji ?: "📝") }
     var date by remember { mutableStateOf(item?.dueDate) }
     var time by remember { mutableStateOf(item?.dueTime) }
-    var repeatMode by remember { mutableStateOf(item?.repeatMode ?: "None") }
+    var repeatMode by remember { 
+        mutableStateOf(
+            item?.repeatMode ?: when(initialTab) {
+                1 -> "Daily"
+                2 -> "Weekly"
+                else -> "None"
+            }
+        ) 
+    }
     var attachmentLink by remember { mutableStateOf(item?.attachmentLink ?: "") }
     
+    val daysOfWeek = listOf("Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu")
+    var selectedDayIndex by remember { 
+        mutableIntStateOf(
+            item?.dueDate?.let {
+                val cal = Calendar.getInstance()
+                cal.timeInMillis = it
+                cal.get(Calendar.DAY_OF_WEEK) - 1
+            } ?: Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1
+        )
+    }
+
     val context = LocalContext.current
-    val categories = listOf("Umum", "Kerja", "Belajar", "Pribadi")
     
     val emojiOptions = listOf(
         "📝", "💻", "📚", "🎓", "☕", 
@@ -1146,12 +1647,33 @@ fun CyberAddEditSheet(
                 .padding(bottom = 32.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            Text(
-                if (item == null) "MISI BARU" else "PERBARUI MISI", 
-                fontWeight = FontWeight.Black, 
-                letterSpacing = 2.sp, 
-                color = Color.White
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    if (item == null) "MISI BARU" else "PERBARUI MISI", 
+                    fontWeight = FontWeight.Black, 
+                    letterSpacing = 2.sp, 
+                    color = Color.White
+                )
+                
+                Surface(
+                    color = if (repeatMode == "None") NeonCyan.copy(0.1f) else glowColor.copy(0.1f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, if (repeatMode == "None") NeonCyan.copy(0.3f) else glowColor.copy(0.3f))
+                ) {
+                    Text(
+                        if (repeatMode == "None") "AGENDA" else "ORBIT BERULANG",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (repeatMode == "None") NeonCyan else glowColor
+                    )
+                }
+            }
+            
             Spacer(modifier = Modifier.height(16.dp))
             val focusManager = LocalFocusManager.current
 
@@ -1203,6 +1725,157 @@ fun CyberAddEditSheet(
             )
 
             Spacer(modifier = Modifier.height(16.dp))
+            
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = {
+                        if (repeatMode == "None") {
+                            val calendar = Calendar.getInstance()
+                            if (date != null) calendar.timeInMillis = date!!
+                            DatePickerDialog(context, { _, y, m, d ->
+                                date = Calendar.getInstance().apply { set(y, m, d) }.timeInMillis
+                            }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show()
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(0.05f)),
+                    shape = RoundedCornerShape(12.dp),
+                    enabled = repeatMode == "None"
+                ) {
+                    Icon(Icons.Default.CalendarMonth, null, modifier = Modifier.size(16.dp), tint = if(repeatMode == "None") Color.White else Color.White.copy(0.2f))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    when (repeatMode) {
+                        "None" -> {
+                            val sdf = SimpleDateFormat("EEEE, dd/MM", Locale("id", "ID"))
+                            Text(if (date == null) "Pilih Tanggal" else sdf.format(Date(date!!)), fontSize = 10.sp)
+                        }
+                        "Daily" -> {
+                            Text("Setiap Hari", fontSize = 10.sp, color = Color.White.copy(0.5f))
+                        }
+                        "Weekly" -> {
+                            Text("Setiap ${daysOfWeek[selectedDayIndex]}", fontSize = 10.sp, color = Color.White.copy(0.5f))
+                        }
+                    }
+                }
+                
+                Button(
+                    onClick = {
+                        val calendar = Calendar.getInstance()
+                        val initialHour = time?.split(":")?.get(0)?.toInt() ?: calendar.get(Calendar.HOUR_OF_DAY)
+                        val initialMin = time?.split(":")?.get(1)?.toInt() ?: calendar.get(Calendar.MINUTE)
+                        
+                        TimePickerDialog(context, { _, h, m ->
+                            time = String.format("%02d:%02d", h, m)
+                            
+                            if (repeatMode == "Daily") {
+                                val cal = Calendar.getInstance()
+                                if (h < cal.get(Calendar.HOUR_OF_DAY) || (h == cal.get(Calendar.HOUR_OF_DAY) && m <= cal.get(Calendar.MINUTE))) {
+                                    cal.add(Calendar.DAY_OF_YEAR, 1)
+                                }
+                                date = cal.timeInMillis
+                            }
+                        }, initialHour, initialMin, true).show()
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(0.05f)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.AccessTime, null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(time ?: "Pilih Jam", fontSize = 10.sp)
+                }
+            }
+
+            if (repeatMode == "Weekly") {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("PILIH HARI ORBIT", fontSize = 10.sp, fontWeight = FontWeight.Black, color = Color.White.copy(0.4f))
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+                    daysOfWeek.forEachIndexed { index, day ->
+                        val active = selectedDayIndex == index
+                        Box(
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (active) glowColor.copy(0.2f) else Color.White.copy(0.05f))
+                                .border(1.dp, if (active) glowColor else Color.Transparent, RoundedCornerShape(8.dp))
+                                .clickable { 
+                                    selectedDayIndex = index
+                                    val cal = Calendar.getInstance()
+                                    val currentDay = cal.get(Calendar.DAY_OF_WEEK) - 1
+                                    
+                                    var daysUntil = index - currentDay
+                                    if (daysUntil < 0) daysUntil += 7
+                                    
+                                    if (daysUntil == 0 && time != null) {
+                                        val now = Calendar.getInstance()
+                                        val h = time!!.split(":")[0].toInt()
+                                        val m = time!!.split(":")[1].toInt()
+                                        if (h < now.get(Calendar.HOUR_OF_DAY) || (h == now.get(Calendar.HOUR_OF_DAY) && m <= now.get(Calendar.MINUTE))) {
+                                            daysUntil = 7
+                                        }
+                                    }
+
+                                    cal.add(Calendar.DAY_OF_YEAR, daysUntil)
+                                    date = cal.timeInMillis
+                                }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text(day, fontSize = 11.sp, color = if (active) Color.White else Color.White.copy(0.5f))
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("PENGULANGAN", fontSize = 10.sp, fontWeight = FontWeight.Black, color = Color.White.copy(0.4f))
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+                listOf("None" to "Agenda", "Daily" to "Harian", "Weekly" to "Mingguan").forEach { (mode, label) ->
+                    val active = repeatMode == mode
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (active) (if(mode=="None") NeonCyan else glowColor).copy(0.2f) else Color.White.copy(0.05f))
+                            .border(1.dp, if (active) (if(mode=="None") NeonCyan else glowColor) else Color.White.copy(0.1f), RoundedCornerShape(8.dp))
+                            .clickable { 
+                                repeatMode = mode 
+                                if (mode == "Daily") {
+                                    val cal = Calendar.getInstance()
+                                    time?.let { t ->
+                                        val h = t.split(":")[0].toInt()
+                                        val m = t.split(":")[1].toInt()
+                                        if (h < cal.get(Calendar.HOUR_OF_DAY) || (h == cal.get(Calendar.HOUR_OF_DAY) && m <= cal.get(Calendar.MINUTE))) {
+                                            cal.add(Calendar.DAY_OF_YEAR, 1)
+                                        }
+                                    }
+                                    date = cal.timeInMillis
+                                } else if (mode == "Weekly") {
+                                    val cal = Calendar.getInstance()
+                                    val currentDay = cal.get(Calendar.DAY_OF_WEEK) - 1
+                                    var daysUntil = selectedDayIndex - currentDay
+                                    if (daysUntil < 0) daysUntil += 7
+                                    if (daysUntil == 0 && time != null) {
+                                        val now = Calendar.getInstance()
+                                        val h = time!!.split(":")[0].toInt()
+                                        val m = time!!.split(":")[1].toInt()
+                                        if (h < now.get(Calendar.HOUR_OF_DAY) || (h == now.get(Calendar.HOUR_OF_DAY) && m <= now.get(Calendar.MINUTE))) {
+                                            daysUntil = 7
+                                        }
+                                    }
+                                    cal.add(Calendar.DAY_OF_YEAR, daysUntil)
+                                    date = cal.timeInMillis
+                                } else {
+                                    date = null // Reset for "None" if desired, or keep previous
+                                }
+                            }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(label, fontSize = 12.sp, color = if (active) Color.White else Color.White.copy(0.5f))
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
             Text("EMOJI", fontSize = 10.sp, fontWeight = FontWeight.Black, color = Color.White.copy(0.4f))
             Row(modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
                 emojiOptions.forEach { e ->
@@ -1222,119 +1895,50 @@ fun CyberAddEditSheet(
                 }
             }
             
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("KATEGORI", fontSize = 10.sp, fontWeight = FontWeight.Black, color = Color.White.copy(0.4f))
             Spacer(modifier = Modifier.height(8.dp))
-            
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    onClick = {
-                        val calendar = Calendar.getInstance()
-                        if (date != null) calendar.timeInMillis = date!!
-                        DatePickerDialog(context, { _, y, m, d ->
-                            date = Calendar.getInstance().apply { set(y, m, d) }.timeInMillis
-                        }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show()
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(0.05f)),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.CalendarMonth, null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    val sdf = SimpleDateFormat("EEEE, dd/MM", Locale.getDefault())
-                    Text(if (date == null) "Tanggal" else sdf.format(Date(date!!)), fontSize = 10.sp)
-                }
-                
-                Button(
-                    onClick = {
-                        val calendar = Calendar.getInstance()
-                        TimePickerDialog(context, { _, h, m ->
-                            time = String.format("%02d:%02d", h, m)
-                        }, calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE), true).show()
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(0.05f)),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.AccessTime, null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(time ?: "Jam", fontSize = 12.sp)
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                categories.forEach { cat ->
+                    CategoryChip(
+                        glowColor = glowColor,
+                        category = cat,
+                        selected = category == cat,
+                        onClick = { category = cat }
+                    )
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-
-            Column {
-                Text("KATEGORI", fontSize = 10.sp, fontWeight = FontWeight.Black, color = Color.White.copy(0.4f))
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    categories.forEach { cat ->
-                        Box(modifier = Modifier.weight(1f)) {
-                            CategoryChip(
-                                glowColor = glowColor,
-                                category = cat,
-                                selected = category == cat,
-                                onClick = { category = cat }
-                            )
-                        }
+            Text("PRIORITAS", fontSize = 10.sp, fontWeight = FontWeight.Black, color = Color.White.copy(0.4f))
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                listOf("RENDAH" to 0, "SEDANG" to 1, "TINGGI" to 2).forEach { (label, value) ->
+                    val active = priority == value
+                    val pColor = when(value) {
+                        2 -> CyberRed
+                        1 -> CyberAmber
+                        else -> CyberGreen
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (active) pColor.copy(0.2f) else Color.White.copy(0.05f))
+                            .border(1.dp, if (active) pColor else Color.Transparent, RoundedCornerShape(12.dp))
+                            .clickable { priority = value },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(label, fontWeight = FontWeight.Black, color = if (active) pColor else Color.White.copy(0.4f), fontSize = 11.sp)
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-
-            Column {
-                Text("PRIORITAS", fontSize = 10.sp, fontWeight = FontWeight.Black, color = Color.White.copy(0.4f))
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    listOf("RENDAH" to 0, "SEDANG" to 1, "TINGGI" to 2).forEach { (label, value) ->
-                        val active = priority == value
-                        val pColor = when(value) {
-                            2 -> CyberRed
-                            1 -> CyberAmber
-                            else -> CyberGreen
-                        }
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(44.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(if (active) pColor.copy(0.2f) else Color.White.copy(0.05f))
-                                .border(1.dp, if (active) pColor else Color.Transparent, RoundedCornerShape(12.dp))
-                                .clickable { priority = value },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(label, fontWeight = FontWeight.Black, color = if (active) pColor else Color.White.copy(0.4f), fontSize = 11.sp)
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Column {
-                Text("PENGULANGAN", fontSize = 10.sp, fontWeight = FontWeight.Black, color = Color.White.copy(0.4f))
-                Row(modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
-                    listOf("None" to "Tidak Ada", "Daily" to "Harian", "Weekly" to "Mingguan").forEach { (mode, label) ->
-                        val active = repeatMode == mode
-                        Box(
-                            modifier = Modifier
-                                .padding(end = 8.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (active) glowColor.copy(0.2f) else Color.Transparent)
-                                .border(1.dp, if (active) glowColor else Color.White.copy(0.1f), RoundedCornerShape(8.dp))
-                                .clickable { repeatMode = mode }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Text(label, fontSize = 12.sp, color = if (active) Color.White else Color.White.copy(0.5f))
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            
             OutlinedTextField(
                 value = attachmentLink,
                 onValueChange = { attachmentLink = it },
@@ -1351,14 +1955,13 @@ fun CyberAddEditSheet(
             )
             
             Spacer(modifier = Modifier.height(32.dp))
-            
             Button(
                 onClick = { onSave(text, description, priority, category, emoji, date, time, repeatMode, attachmentLink, null) },
                 modifier = Modifier.fillMaxWidth().height(60.dp),
                 enabled = text.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = glowColor,
-                    disabledContainerColor = glowColor.copy(alpha = 0.3f)
+                    containerColor = if(repeatMode == "None") NeonCyan else glowColor,
+                    disabledContainerColor = (if(repeatMode == "None") NeonCyan else glowColor).copy(alpha = 0.3f)
                 ),
                 shape = RoundedCornerShape(16.dp)
             ) {

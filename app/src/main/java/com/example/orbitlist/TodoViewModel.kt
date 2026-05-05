@@ -1,14 +1,20 @@
 package com.example.orbitlist
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 class TodoViewModel(application: Application) : AndroidViewModel(application) {
     private val todoDao = TodoDatabase.getDatabase(application).todoDao()
@@ -16,6 +22,17 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: Flow<String> = _searchQuery
+
+    private val rawTasks: Flow<List<TodoItem>> = todoDao.getAllTasks()
+
+    private val prefs = application.getSharedPreferences("OrbitListPrefs", Context.MODE_PRIVATE)
+    private val _streak = MutableStateFlow(prefs.getInt("orbit_streak", 0))
+    val streak: StateFlow<Int> = _streak.asStateFlow()
+
+    private val _categories = MutableStateFlow(
+        prefs.getStringSet("custom_categories", setOf("Umum", "Kerja", "Belajar", "Pribadi"))?.toList() ?: listOf("Umum", "Kerja", "Belajar", "Pribadi")
+    )
+    val categories: StateFlow<List<String>> = _categories.asStateFlow()
 
     val allTasks: Flow<List<TodoItem>> = combine(todoDao.getAllTasks(), _searchQuery) { tasks, query ->
         if (query.isBlank()) {
@@ -30,6 +47,81 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         NotificationHelper.createNotificationChannel(context)
+        checkAndResetStreak()
+        
+        // Auto update streak when tasks change
+        viewModelScope.launch {
+            rawTasks.collect { tasks ->
+                updateStreakIfNeeded(tasks)
+            }
+        }
+    }
+
+    private fun checkAndResetStreak() {
+        val lastDate = prefs.getString("last_streak_date", "")
+        if (lastDate.isNullOrEmpty()) return
+
+        val sdf = SimpleDateFormat("yyyyMMdd", Locale.getDefault())
+        val today = sdf.format(Date())
+        val lastDateObj = sdf.parse(lastDate) ?: return
+        
+        val calendar = Calendar.getInstance()
+        calendar.time = lastDateObj
+        calendar.add(Calendar.DAY_OF_YEAR, 1)
+        val dayAfterLast = sdf.format(calendar.time)
+
+        // If today is not the same as last update date AND not the day after, streak is broken
+        if (today != lastDate && today != dayAfterLast) {
+            _streak.value = 0
+            prefs.edit().putInt("orbit_streak", 0).apply()
+        }
+    }
+
+    fun updateStreakIfNeeded(tasks: List<TodoItem>) {
+        val total = tasks.size
+        val completed = tasks.count { it.isDone }
+        
+        if (total > 0 && total == completed) {
+            val sdf = SimpleDateFormat("yyyyMMdd", Locale.getDefault())
+            val today = sdf.format(Date())
+            val lastDate = prefs.getString("last_streak_date", "")
+
+            if (lastDate != today) {
+                // Check if it's consecutive
+                val current = _streak.value
+                val newStreak = if (lastDate.isNullOrEmpty()) 1 else {
+                    val lastDateObj = sdf.parse(lastDate)!!
+                    val cal = Calendar.getInstance()
+                    cal.time = lastDateObj
+                    cal.add(Calendar.DAY_OF_YEAR, 1)
+                    if (sdf.format(cal.time) == today) current + 1 else 1
+                }
+                
+                _streak.value = newStreak
+                prefs.edit()
+                    .putInt("orbit_streak", newStreak)
+                    .putString("last_streak_date", today)
+                    .apply()
+            }
+        }
+    }
+
+    fun addCategory(category: String) {
+        val current = _categories.value.toMutableList()
+        if (!current.contains(category)) {
+            current.add(category)
+            _categories.value = current
+            prefs.edit().putStringSet("custom_categories", current.toSet()).apply()
+        }
+    }
+
+    fun removeCategory(category: String) {
+        val current = _categories.value.toMutableList()
+        if (current.size > 1 && current.contains(category)) {
+            current.remove(category)
+            _categories.value = current
+            prefs.edit().putStringSet("custom_categories", current.toSet()).apply()
+        }
     }
 
     fun updateSearchQuery(query: String) {
@@ -68,31 +160,31 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateTaskStatus(item: TodoItem, isDone: Boolean) {
         viewModelScope.launch {
-            val updatedItem = item.copy(
-                isDone = isDone,
-                completedAt = if (isDone) System.currentTimeMillis() else null
-            )
-            todoDao.updateTask(updatedItem)
-            
-            if (isDone) {
-                NotificationHelper.cancelNotification(context, item.id)
-            } else {
+           if (isDone && item.repeatMode != "None") {
+                // Single entry loop logic: Update the same entry with next date
+                val nextDueDate = calculateNextDueDate(item.dueDate ?: System.currentTimeMillis(), item.repeatMode)
+                val updatedItem = item.copy(
+                    isDone = false, // Automatically reset for next occurrence
+                    dueDate = nextDueDate,
+                    completedAt = System.currentTimeMillis() // Track last completion
+                )
+                todoDao.updateTask(updatedItem)
                 NotificationHelper.scheduleNotification(context, updatedItem)
+            } else {
+                // Regular one-time task logic
+                val updatedItem = item.copy(
+                    isDone = isDone,
+                    completedAt = if (isDone) System.currentTimeMillis() else null
+                )
+                todoDao.updateTask(updatedItem)
+                
+                if (isDone) {
+                    NotificationHelper.cancelNotification(context, item.id)
+                } else {
+                    NotificationHelper.scheduleNotification(context, updatedItem)
+                }
             }
         }
-    }
-
-    private suspend fun handleRecurringTask(item: TodoItem) {
-        val nextDueDate = calculateNextDueDate(item.dueDate ?: System.currentTimeMillis(), item.repeatMode)
-        val newItem = item.copy(
-            id = 0,
-            isDone = false,
-            dueDate = nextDueDate,
-            completedAt = null,
-            createdAt = System.currentTimeMillis()
-        )
-        val newId = todoDao.addTask(newItem)
-        NotificationHelper.scheduleNotification(context, newItem.copy(id = newId.toInt()))
     }
 
     private fun calculateNextDueDate(currentDate: Long, repeatMode: String): Long {

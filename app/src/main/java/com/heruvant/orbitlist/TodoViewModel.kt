@@ -125,15 +125,31 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateStreakIfNeeded(tasks: List<TodoItem>) {
-        val total = tasks.size
-        val completed = tasks.count { it.isDone }
+        val today = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+
+        val tomorrow = today + 24 * 60 * 60 * 1000
+
+        // Only consider tasks due today or overdue
+        val todayTasks = tasks.filter { item ->
+            item.dueDate != null && item.dueDate!! < tomorrow
+        }
+
+        if (todayTasks.isEmpty()) return
+
+        val total = todayTasks.size
+        val completed = todayTasks.count { it.isDone }
 
         if (total > 0 && total == completed) {
             val sdf = SimpleDateFormat("yyyyMMdd", Locale.getDefault())
-            val today = sdf.format(Date())
+            val todayStr = sdf.format(Date())
             val lastDate = prefs.getString("last_streak_date", "")
 
-            if (lastDate != today) {
+            if (lastDate != todayStr) {
                 // Check if it's consecutive
                 val current = _streak.value
                 val newStreak = if (lastDate.isNullOrEmpty()) 1 else {
@@ -141,13 +157,13 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                     val cal = Calendar.getInstance()
                     cal.time = lastDateObj
                     cal.add(Calendar.DAY_OF_YEAR, 1)
-                    if (sdf.format(cal.time) == today) current + 1 else 1
+                    if (sdf.format(cal.time) == todayStr) current + 1 else 1
                 }
 
                 _streak.value = newStreak
                 prefs.edit()
                     .putInt("orbit_streak", newStreak)
-                    .putString("last_streak_date", today)
+                    .putString("last_streak_date", todayStr)
                     .apply()
             }
         }

@@ -268,16 +268,39 @@ fun TodoAppContent(
     val categories by viewModel.categories.collectAsState()
     
     val filterCategories = listOf("Semua") + categories
+
+    val todayMillis = remember {
+        Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+    val tomorrowMillis = todayMillis + 24 * 60 * 60 * 1000
+    val endOfWeekMillis = todayMillis + 7 * 24 * 60 * 60 * 1000
     
     val filteredList = todoList.filter { 
         val matchesCategory = filterCategory == "Semua" || it.category == filterCategory
         val matchesTab = when(selectedTab) {
-            0 -> it.repeatMode == "Daily"
-            1 -> it.repeatMode == "Weekly"
-            2 -> it.repeatMode == "None"
-            else -> false
+            0 -> it.dueDate != null && it.dueDate!! < tomorrowMillis // Today or overdue
+            1 -> it.dueDate != null && it.dueDate!! < endOfWeekMillis // Within 7 days
+            2 -> true // Agenda (All)
+            else -> true
         }
         matchesCategory && matchesTab
+    }
+
+    val categoryCounts = remember(todoList, selectedTab) {
+        val counts = todoList.filter { item ->
+            when(selectedTab) {
+                0 -> item.dueDate != null && item.dueDate!! < tomorrowMillis
+                1 -> item.dueDate != null && item.dueDate!! < endOfWeekMillis
+                2 -> true
+                else -> true
+            }
+        }.groupBy { it.category }.mapValues { it.value.size }
+        counts
     }
 
     // State untuk drag-and-drop
@@ -332,16 +355,23 @@ fun TodoAppContent(
                 Column {
                     CenterAlignedTopAppBar(
                         title = {
+                            val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+                            val (greeting, subGreeting) = when {
+                                hour in 4..10 -> "SELAMAT PAGI, KAPTEN" to "Siap untuk peluncuran misi hari ini?"
+                                hour in 11..14 -> "SELAMAT SIANG, KAPTEN" to "Orbit tetap stabil. Lanjutkan eksekusi."
+                                hour in 15..18 -> "SELAMAT SORE, KAPTEN" to "Misi hampir usai. Siapkan sinkronisasi."
+                                else -> "SELAMAT MALAM, KAPTEN" to "Waktunya istirahat di pangkalan orbit."
+                            }
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    "ORBIT LIST",
+                                    greeting,
                                     fontWeight = FontWeight.Black,
-                                    letterSpacing = 4.sp,
-                                    style = MaterialTheme.typography.titleLarge,
+                                    letterSpacing = 2.sp,
+                                    style = MaterialTheme.typography.titleMedium,
                                     color = Color.White
                                 )
                                 Text(
-                                    "Kelola aktivitasmu dalam orbit yang teratur.",
+                                    subGreeting,
                                     style = MaterialTheme.typography.labelSmall,
                                     color = Color.White.copy(0.6f),
                                     fontWeight = FontWeight.Medium
@@ -710,9 +740,10 @@ fun TodoAppContent(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(filterCategories) { cat ->
+                        val count = if (cat == "Semua") filteredList.size else categoryCounts[cat] ?: 0
                         CategoryChip(
                             glowColor = glowColor,
-                            category = cat,
+                            category = if (count > 0) "$cat ($count)" else cat,
                             selected = filterCategory == cat,
                             onClick = { filterCategory = cat }
                         )
@@ -1438,6 +1469,9 @@ fun CyberTodoRow(glowColor: Color, item: TodoItem, onToggle: () -> Unit, onDelet
         else -> CyberGreen
     }
     
+    val isHighPriority = item.priority == 2
+    val glowIntensity = if (isHighPriority) 0.3f else 0.1f
+    
     val isRecurring = item.repeatMode != "None"
     val isDue = remember(item.dueDate, item.dueTime, item.isDone) {
         if (item.isDone) return@remember true // If already done, we show checklist, not lock
@@ -1475,9 +1509,17 @@ fun CyberTodoRow(glowColor: Color, item: TodoItem, onToggle: () -> Unit, onDelet
             .fillMaxWidth()
             .scale(scale)
             .border(
-                1.dp, 
-                if (item.isPinned) glowColor.copy(0.4f) else Color.White.copy(0.08f), 
-                RoundedCornerShape(24.dp)
+                width = if (isHighPriority) 2.dp else 1.dp,
+                color = if (isHighPriority) CyberRed.copy(0.6f) else if (item.isPinned) glowColor.copy(0.4f) else Color.White.copy(0.08f),
+                shape = RoundedCornerShape(24.dp)
+            )
+            .then(
+                if (isHighPriority) Modifier.shadow(
+                    elevation = 12.dp,
+                    shape = RoundedCornerShape(24.dp),
+                    ambientColor = CyberRed,
+                    spotColor = CyberRed
+                ) else Modifier
             )
     ) {
         Column(modifier = Modifier.padding(16.dp).alpha(alpha)) {
@@ -1812,6 +1854,19 @@ fun CyberAddEditSheet(
                     letterSpacing = 2.sp, 
                     color = Color.White
                 )
+
+                if (item == null && text.isNotBlank()) {
+                    TextButton(
+                        onClick = { 
+                            onSave(text, "", 1, "Umum", "🚀", System.currentTimeMillis(), "09:00", "None", "", null) 
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = NeonCyan)
+                    ) {
+                        Icon(Icons.Default.FlashOn, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("KIRIM CEPAT", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                }
                 
                 Surface(
                     color = if (repeatMode == "None") NeonCyan.copy(0.1f) else glowColor.copy(0.1f),

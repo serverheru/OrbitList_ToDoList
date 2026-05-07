@@ -1,5 +1,6 @@
 package com.heruvant.orbitlist
 
+import android.app.AlarmManager
 import android.content.Context
 import android.content.Intent
 import android.media.RingtoneManager
@@ -59,6 +60,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.input.pointer.pointerInput
@@ -70,6 +72,8 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
+import androidx.compose.material.icons.filled.FlashOn
+import android.provider.Settings
 import androidx.compose.ui.res.painterResource
 import com.heruvant.orbitlist.ui.theme.CyberAmber
 import com.heruvant.orbitlist.ui.theme.CyberGreen
@@ -89,11 +93,23 @@ class MainActivity : ComponentActivity() {
         setTheme(R.style.Theme_School)
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        // Check for Exact Alarm permission
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            if (!alarmManager.canScheduleExactAlarms()) {
+                val intent = Intent().apply {
+                    action = Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM
+                }
+                startActivity(intent)
+            }
+        }
+        
         setContent {
             val context = LocalContext.current
             val prefs = remember { context.getSharedPreferences("OrbitListPrefs", Context.MODE_PRIVATE) }
-            var showLanding by remember { mutableStateOf(prefs.getBoolean("is_first_run", true)) }
-            var splashPhase by remember { mutableStateOf(0) } // 0: App Splash, 1: Agency Splash, 2: Content/Landing
+            var showLanding by rememberSaveable { mutableStateOf(prefs.getBoolean("is_first_run", true)) }
+            var splashPhase by rememberSaveable { mutableIntStateOf(0) } // 0: App Splash, 1: Agency Splash, 2: Content/Landing
 
             LaunchedEffect(Unit) {
                 delay(1500)
@@ -252,12 +268,12 @@ fun TodoAppContent(
 ) {
     var editingItem by remember { mutableStateOf<TodoItem?>(null) }
     var detailItem by remember { mutableStateOf<TodoItem?>(null) }
-    var showSheet by remember { mutableStateOf(false) }
-    var showFlightLog by remember { mutableStateOf(false) }
-    var showSettings by remember { mutableStateOf(false) }
-    var showHelp by remember { mutableStateOf(false) }
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: Harian, 1: Mingguan, 2: Agenda
-    var filterCategory by remember { mutableStateOf("Semua") }
+    var showSheet by rememberSaveable { mutableStateOf(false) }
+    var showFlightLog by rememberSaveable { mutableStateOf(false) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
+    var showHelp by rememberSaveable { mutableStateOf(false) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) } // 0: Harian, 1: Mingguan, 2: Agenda
+    var filterCategory by rememberSaveable { mutableStateOf("Semua") }
     val searchQuery by viewModel.searchQuery.collectAsState(initial = "")
     
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -283,24 +299,26 @@ fun TodoAppContent(
     val filteredList = todoList.filter { 
         val matchesCategory = filterCategory == "Semua" || it.category == filterCategory
         val matchesTab = when(selectedTab) {
-            0 -> it.dueDate != null && it.dueDate!! < tomorrowMillis // Today or overdue
-            1 -> it.dueDate != null && it.dueDate!! < endOfWeekMillis // Within 7 days
-            2 -> true // Agenda (All)
+            0 -> it.repeatMode == "Daily"
+            1 -> it.repeatMode == "Weekly"
+            2 -> it.repeatMode == "None"
             else -> true
         }
         matchesCategory && matchesTab
     }
 
     val categoryCounts = remember(todoList, selectedTab) {
-        val counts = todoList.filter { item ->
+        val filteredForTab = todoList.filter { item ->
             when(selectedTab) {
-                0 -> item.dueDate != null && item.dueDate!! < tomorrowMillis
-                1 -> item.dueDate != null && item.dueDate!! < endOfWeekMillis
-                2 -> true
+                0 -> item.repeatMode == "Daily"
+                1 -> item.repeatMode == "Weekly"
+                2 -> item.repeatMode == "None"
                 else -> true
             }
-        }.groupBy { it.category }.mapValues { it.value.size }
-        counts
+        }
+        categories.associateWith { cat ->
+            filteredForTab.count { it.category == cat }
+        }
     }
 
     // State untuk drag-and-drop
@@ -308,15 +326,8 @@ fun TodoAppContent(
     var draggingOffset by remember { mutableStateOf(0f) }
 
     val totalTasks = filteredList.size
-    val completedTasks = filteredList.count { 
-        if (selectedTab == 2) it.isDone 
-        else {
-            // For recurring tasks, consider it "done for today" if:
-            // 1. isDone is true (not yet rolled over)
-            // 2. OR it was completed in the last 24 hours (for Daily) or 7 days (for Weekly)
-            it.isDone || (it.completedAt != null && it.completedAt!! > System.currentTimeMillis() - 24 * 60 * 60 * 1000)
-        }
-    }
+    val completedTasks = filteredList.count { it.isDone }
+    
     val progressAnim by animateFloatAsState(
         targetValue = if (totalTasks > 0) completedTasks.toFloat() / totalTasks else 0f,
         animationSpec = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
@@ -1470,7 +1481,6 @@ fun CyberTodoRow(glowColor: Color, item: TodoItem, onToggle: () -> Unit, onDelet
     }
     
     val isHighPriority = item.priority == 2
-    val glowIntensity = if (isHighPriority) 0.3f else 0.1f
     
     val isRecurring = item.repeatMode != "None"
     val isDue = remember(item.dueDate, item.dueTime, item.isDone) {
@@ -1480,6 +1490,13 @@ fun CyberTodoRow(glowColor: Color, item: TodoItem, onToggle: () -> Unit, onDelet
         val target = Calendar.getInstance()
         if (item.dueDate != null) {
             target.timeInMillis = item.dueDate
+            
+            // Check if it's TODAY. If it's today, we UNLOCK it early
+            val isToday = now.get(Calendar.YEAR) == target.get(Calendar.YEAR) &&
+                         now.get(Calendar.DAY_OF_YEAR) == target.get(Calendar.DAY_OF_YEAR)
+            
+            if (isToday) return@remember true
+
             if (item.dueTime != null) {
                 val parts = item.dueTime.split(":")
                 target.set(Calendar.HOUR_OF_DAY, parts[0].toInt())
@@ -1801,8 +1818,8 @@ fun CyberAddEditSheet(
     var repeatMode by remember { 
         mutableStateOf(
             item?.repeatMode ?: when(initialTab) {
-                1 -> "Daily"
-                2 -> "Weekly"
+                0 -> "Daily"
+                1 -> "Weekly"
                 else -> "None"
             }
         ) 

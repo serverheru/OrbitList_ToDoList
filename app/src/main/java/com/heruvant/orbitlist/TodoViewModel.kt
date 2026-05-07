@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -45,42 +47,36 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            // Reset recurring tasks if next period has started
             val now = System.currentTimeMillis()
             val calendar = Calendar.getInstance()
-            val todayMidnight = Calendar.getInstance().apply {
-                set(Calendar.HOUR_OF_DAY, 0)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }.timeInMillis
-
+            
+            // Fixed 00:00 Reset Logic
             filtered.map { item ->
-                if (item.isDone && item.repeatMode != "None" && item.dueDate != null) {
-                    // Determine when to reset: Midnight of the day after the dueDate
+                if (item.repeatMode != "None" && item.dueDate != null) {
                     calendar.timeInMillis = item.dueDate
-                    if (item.repeatMode == "Daily") {
-                        calendar.add(Calendar.DAY_OF_YEAR, 1)
-                    } else if (item.repeatMode == "Weekly") {
-                        calendar.add(Calendar.WEEK_OF_YEAR, 1)
+                    
+                    // Reset point is 00:00 of the day AFTER the due date
+                    val resetCalendar = Calendar.getInstance().apply {
+                        timeInMillis = item.dueDate
+                        if (item.repeatMode == "Daily") {
+                            add(Calendar.DAY_OF_YEAR, 1)
+                        } else if (item.repeatMode == "Weekly") {
+                            add(Calendar.WEEK_OF_YEAR, 1)
+                        }
+                        set(Calendar.HOUR_OF_DAY, 0)
+                        set(Calendar.MINUTE, 0)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
                     }
 
-                    // Set to start of that next period (Midnight)
-                    calendar.set(Calendar.HOUR_OF_DAY, 0)
-                    calendar.set(Calendar.MINUTE, 0)
-                    calendar.set(Calendar.SECOND, 0)
-                    calendar.set(Calendar.MILLISECOND, 0)
-
-                    val resetTime = calendar.timeInMillis
-
-                    // Only reset if it wasn't completed today (allows it to stay struck through for the rest of today)
-                    val isCompletedToday =
-                        item.completedAt != null && item.completedAt!! >= todayMidnight
-
-                    if (now >= resetTime && !isCompletedToday) {
-                        // Time to reset for next period
+                    if (now >= resetCalendar.timeInMillis) {
+                        // Time to reset
                         val nextDueDate = calculateNextDueDate(item.dueDate, item.repeatMode)
-                        val resetItem = item.copy(isDone = false, dueDate = nextDueDate)
+                        val resetItem = item.copy(
+                            isDone = false, 
+                            dueDate = nextDueDate, 
+                            completedAt = null // Ensure indicator goes to 0
+                        )
                         viewModelScope.launch { todoDao.updateTask(resetItem) }
                         resetItem
                     } else {
@@ -95,6 +91,12 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     init {
         NotificationHelper.createNotificationChannel(context)
         checkAndResetStreak()
+        
+        // Auto-Pilot and Audit on Launch
+        viewModelScope.launch {
+            delay(1000)
+            checkAndAutoExecuteTasks()
+        }
 
         // Auto update streak when tasks change
         viewModelScope.launch {
@@ -117,32 +119,62 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         calendar.add(Calendar.DAY_OF_YEAR, 1)
         val dayAfterLast = sdf.format(calendar.time)
 
-        // If today is not the same as last update date AND not the day after, streak is broken
         if (today != lastDate && today != dayAfterLast) {
             _streak.value = 0
             prefs.edit().putInt("orbit_streak", 0).apply()
         }
     }
 
+    private fun checkAndAutoExecuteTasks() {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val tasks = todoDao.getAllTasks().first()
+            
+            tasks.forEach { item ->
+                if (!item.isDone && item.dueDate != null && item.dueTime != null) {
+                    val target = Calendar.getInstance().apply {
+                        timeInMillis = item.dueDate
+                        val parts = item.dueTime.split(":")
+                        set(Calendar.HOUR_OF_DAY, parts[0].toInt())
+                        set(Calendar.MINUTE, parts[1].toInt())
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }
+                    
+                    val threshold = 10 * 60 * 1000 // 10 minutes
+                    if (now > target.timeInMillis + threshold) {
+                        val updatedItem = item.copy(
+                            isDone = true,
+                            completedAt = now,
+                            description = if (item.description.contains("🤖 AUTO-PILOT")) item.description 
+                                         else item.description + "\n\n🤖 AUTO-PILOT: Dieksekusi otomatis (User tidak respons > 10m)"
+                        )
+                        todoDao.updateTask(updatedItem)
+                        NotificationHelper.cancelNotification(context, item.id)
+                    }
+                }
+            }
+        }
+    }
+
     fun updateStreakIfNeeded(tasks: List<TodoItem>) {
-        val today = Calendar.getInstance().apply {
+        val todayCal = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0)
             set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
+        }
+        val tomorrowCal = (todayCal.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) }
 
-        val tomorrow = today + 24 * 60 * 60 * 1000
-
-        // Only consider tasks due today or overdue
-        val todayTasks = tasks.filter { item ->
-            item.dueDate != null && item.dueDate!! < tomorrow
+        // Only count tasks due today or before (overdue)
+        val relevantTasks = tasks.filter { 
+            it.dueDate != null && it.dueDate!! < tomorrowCal.timeInMillis 
         }
 
-        if (todayTasks.isEmpty()) return
+        if (relevantTasks.isEmpty()) return
 
-        val total = todayTasks.size
-        val completed = todayTasks.count { it.isDone }
+        val total = relevantTasks.size
+        val completed = relevantTasks.count { it.isDone }
 
         if (total > 0 && total == completed) {
             val sdf = SimpleDateFormat("yyyyMMdd", Locale.getDefault())
@@ -150,7 +182,6 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
             val lastDate = prefs.getString("last_streak_date", "")
 
             if (lastDate != todayStr) {
-                // Check if it's consecutive
                 val current = _streak.value
                 val newStreak = if (lastDate.isNullOrEmpty()) 1 else {
                     val lastDateObj = sdf.parse(lastDate)!!
@@ -223,37 +254,16 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateTaskStatus(item: TodoItem, isDone: Boolean) {
         viewModelScope.launch {
-           if (isDone && item.repeatMode != "None") {
-                // Stay checked but track time
-                val updatedItem = item.copy(
-                    isDone = true,
-                    completedAt = System.currentTimeMillis()
-                )
-                todoDao.updateTask(updatedItem)
+            val updatedItem = item.copy(
+                isDone = isDone,
+                completedAt = if (isDone) System.currentTimeMillis() else null
+            )
+            todoDao.updateTask(updatedItem)
+
+            if (isDone) {
                 NotificationHelper.cancelNotification(context, item.id)
-            } else if (item.repeatMode != "None" && !isDone) {
-                // If user somehow tries to uncheck a recurring task that's done, ignore it if isDone is already true
-                if (item.isDone) return@launch
-
-                val updatedItem = item.copy(
-                    isDone = false,
-                    completedAt = null
-                )
-                todoDao.updateTask(updatedItem)
-                NotificationHelper.scheduleNotification(context, updatedItem)
             } else {
-                // Regular one-time task logic
-                val updatedItem = item.copy(
-                    isDone = isDone,
-                    completedAt = if (isDone) System.currentTimeMillis() else null
-                )
-                todoDao.updateTask(updatedItem)
-
-                if (isDone) {
-                    NotificationHelper.cancelNotification(context, item.id)
-                } else {
-                    NotificationHelper.scheduleNotification(context, updatedItem)
-                }
+                NotificationHelper.scheduleNotification(context, updatedItem)
             }
         }
     }
@@ -263,7 +273,6 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         calendar.timeInMillis = currentDate
         val now = System.currentTimeMillis()
 
-        // Ensure the next due date is in the future
         while (calendar.timeInMillis <= now) {
             when (repeatMode) {
                 "Daily" -> calendar.add(Calendar.DAY_OF_YEAR, 1)
@@ -296,17 +305,16 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
 
     fun moveTask(fromIndex: Int, toIndex: Int, currentList: List<TodoItem>) {
         viewModelScope.launch {
-            val newList = currentList.toMutableList()
-            if (fromIndex in newList.indices && toIndex in newList.indices) {
-                val item = newList.removeAt(fromIndex)
-                newList.add(toIndex, item)
-
-                // Update all positions in database
-                newList.forEachIndexed { index, todoItem ->
-                    if (todoItem.position != index) {
-                        todoDao.updateTask(todoItem.copy(position = index))
-                    }
-                }
+            if (fromIndex in currentList.indices && toIndex in currentList.indices) {
+                val fromItem = currentList[fromIndex]
+                val toItem = currentList[toIndex]
+                
+                val fromPos = fromItem.position
+                val toPos = toItem.position
+                
+                // Swap positions specifically
+                todoDao.updateTask(fromItem.copy(position = toPos))
+                todoDao.updateTask(toItem.copy(position = fromPos))
             }
         }
     }
